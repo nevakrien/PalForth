@@ -2,7 +2,7 @@
 CFLAGS := -O2 -Wall
 OBJ = header_impels.o
 
-HEADERS=arena.h config.h
+HEADERS=arena.h config.h cutf8.h
 
 # Optional: Enable arena support via `make USE_ARENA=1`
 ifeq ($(USE_ARENA),1)
