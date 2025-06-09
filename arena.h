@@ -2,11 +2,16 @@
 #define ARENA_H
 
 #include <stddef.h>
+#include "utils.h"
 
-typedef struct Arena{
+//this should be rewritten to dynamic arrays later
+
+typedef struct Arena Arena;
+
+struct Arena{
 	void* mem;
-	struct Arena* next;
-}Arena;
+	Arena* next;
+};
 
 void* arena_alloc(Arena* arena,size_t size);
 void arena_free(Arena* arena);

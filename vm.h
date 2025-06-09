@@ -38,7 +38,10 @@ struct code {
 struct vm {
 	Stack stack;
 	Code* pc;
+	
 	Code* catch_point;
+	Arena temp_mem;
+
 
 #ifdef USE_ARENA
 	Arena dict_mem; //can have memory shared to other VMs
