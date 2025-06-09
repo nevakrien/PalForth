@@ -1,8 +1,16 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define DEBUG_MODE
+// #define UNCHECKED_STACK_OVERFLOW
+
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
+/**
+ * this defines
+ * ALOT + TO_ALOT
+ */
 
 #ifdef USE_ARENA
 #include "arena.h"
@@ -30,7 +38,7 @@ void* palforth_to_alot (VM* vm,void* data,size_t len){
 	ASSERT(data);
 	memcpy(ans,data,len);
 	free(data);
-	
+
 	return ans;
 }
 #endif //CONFIG_IMPLEMENTATION

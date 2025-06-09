@@ -1,8 +1,8 @@
 # Default: no arena
 CFLAGS := -O2 -Wall
-OBJ = header_impels.o
+OBJ = header_impels.o vm.o
 
-HEADERS=arena.h config.h cutf8.h
+HEADERS=arena.h config.h cutf8.h vm.h
 
 # Optional: Enable arena support via `make USE_ARENA=1`
 ifeq ($(USE_ARENA),1)
@@ -24,6 +24,10 @@ test.out: test.c $(OBJ) $(HEADERS)
 
 # Compile header_impels.o with macro flags and header deps
 header_impels.o: header_impels.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile header_impels.o with macro flags and header deps
+vm.o: vm.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
