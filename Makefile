@@ -13,11 +13,13 @@ endif
 
 all: test.out
 
+# Link final binary from .c + .o, but also recompile if headers change
 test.out: test.c $(OBJ) $(HEADERS)
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $(OBJ) test.c -o $@
 
-header_impels.o: header_impels.c
-	$(CC) $(CFLAGS) $^ -c -o $@
+# Compile header_impels.o with macro flags and header deps
+header_impels.o: header_impels.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm $(OBJ) test.out

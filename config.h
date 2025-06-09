@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 #include <stdlib.h>
-
+#include <stdio.h>
 
 #ifdef USE_ARENA
 #include "arena.h"
