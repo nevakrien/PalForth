@@ -1,6 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define TEST
 #define DEBUG_MODE
 // #define UNCHECKED_STACK_OVERFLOW
 

@@ -3,6 +3,10 @@
 
 #include "config.h"
 
+#ifdef TEST
+void test_vm();
+#endif
+
 typedef void* Word;
 
 typedef struct {
@@ -10,6 +14,8 @@ typedef struct {
 	void** cur;
 	intptr_t end;
 } Stack;
+
+#define STACK_LIT(buffer,n) (Stack){(intptr_t)buffer,buffer,(intptr_t)(buffer+n-1)}
 
 typedef struct{
 	const char* message;

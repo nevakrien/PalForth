@@ -8,6 +8,7 @@ int main(){
     (void)cutf8_skip;
     (void)cutf8_valid_buff;
 
+    test_vm();
 	printf("!!!All Tests Passed!!!\n");
 	return 0;
 }

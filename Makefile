@@ -1,5 +1,5 @@
 # Default: no arena
-CFLAGS := -O2 -Wall
+CFLAGS := -g2 -Wall -fsanitize=address
 OBJ = header_impels.o vm.o
 
 HEADERS=arena.h config.h cutf8.h vm.h
