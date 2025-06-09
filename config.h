@@ -1,13 +1,20 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define TEST
 #define DEBUG_MODE
+#define TEST
+
+#ifdef TEST
+#define DEBUG_MODE
+#endif
+
 // #define UNCHECKED_STACK_OVERFLOW
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include "stdbool.h"
+
 /**
  * this defines
  * ALOT + TO_ALOT

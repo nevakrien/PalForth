@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 void* arena_alloc(Arena* arena,size_t size){
 	void* ans = malloc(size);
 	if(!ans)
