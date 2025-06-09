@@ -2,7 +2,7 @@
 #include "utils.h"
 
 extern inline Word* stack_alloc(VM* vm,int count);
-extern inline void stack_free(VM* vm,int count);
+extern inline Word* stack_free(VM* vm,int count);
 
 void panic(VM* vm,long code){
 	if(vm->panic_handler)
@@ -18,15 +18,15 @@ void panic(VM* vm,long code){
 #define STACK_FREE(n) stack_free(vm,n)
 
 #define SPOT(n) *(vm->stack.cur-(n))
-#define PUSH(p) { STACK_ALLOC(1); SPOT(1)=p;}
-#define POP_TO(p) { STACK_FREE(1); p=SPOT(0); }
+#define PUSH(p) { *STACK_ALLOC(1)=p;}
+#define POP() *STACK_FREE(1)
 
 #ifdef TEST
 static void test_inner(VM* vm,size_t size){
 	void* mem = (void*) 5;
 	PUSH(mem);
 	mem=0;
-	POP_TO(mem);
+	mem=POP();
 	assert(mem==(void*) 5);
 
 	STACK_ALLOC(size);

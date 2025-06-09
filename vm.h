@@ -12,7 +12,7 @@ typedef void* Word;
 
 typedef struct{
 	intptr_t base; //avoid weird UB rules on comparing
-	void** cur;
+	Word* cur;
 	intptr_t end; //1 above last valid address
 } Stack;
 
@@ -60,7 +60,7 @@ inline Word* stack_alloc(VM* vm,int count){
 	return ans;
 }
 
-inline void stack_free(VM* vm,int count){
+inline Word* stack_free(VM* vm,int count){
 	intptr_t new_cur = (intptr_t)(vm->stack.cur)-count*sizeof(Word);
 #ifdef DEBUG_MODE
 	if(new_cur < vm->stack.base)
@@ -68,6 +68,7 @@ inline void stack_free(VM* vm,int count){
 
 #endif
 	vm->stack.cur = (Word*) new_cur;
+	return vm->stack.cur;
 }
 
 
