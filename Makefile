@@ -10,8 +10,13 @@ ifeq ($(USE_ARENA),1)
 endif
 
 
-
+.PHONY: clean test
 all: test.out
+
+check: clean all
+
+test: test.out
+	./test.out
 
 # Link final binary from .c + .o, but also recompile if headers change
 test.out: test.c $(OBJ) $(HEADERS)

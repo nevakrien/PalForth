@@ -1,6 +1,6 @@
 #include "vm.h"
 
 int main(){
-	printf("all tests passed\n");
+	printf("!!!All Tests Passed!!!\n");
 	return 0;
 }
