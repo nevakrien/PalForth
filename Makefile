@@ -1,6 +1,6 @@
 # Default: no arena
 CFLAGS := -g2 -Wall -fsanitize=address
-OBJ = header_impels.o vm.o
+OBJ = header_impels.o vm.o arena.o
 
 HEADERS=arena.h config.h cutf8.h vm.h
 
@@ -28,6 +28,10 @@ header_impels.o: header_impels.c $(HEADERS)
 
 # Compile header_impels.o with macro flags and header deps
 vm.o: vm.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile header_impels.o with macro flags and header deps
+arena.o: arena.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
