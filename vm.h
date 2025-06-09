@@ -2,6 +2,7 @@
 #define VM_H
 
 #include "config.h"
+#include "arena.h"
 
 #ifdef TEST
 void test_vm();
@@ -12,10 +13,10 @@ typedef void* Word;
 typedef struct {
 	intptr_t base; //avoid weird UB rules on comparing
 	void** cur;
-	intptr_t end;
+	intptr_t end; //1 above last valid address
 } Stack;
 
-#define STACK_LIT(buffer,n) (Stack){(intptr_t)buffer,buffer,(intptr_t)(buffer+n-1)}
+#define STACK_LIT(buffer,n) (Stack){(intptr_t)buffer,buffer,(intptr_t)(buffer+n)}
 
 typedef struct{
 	const char* message;
@@ -40,6 +41,7 @@ struct vm {
 	Code* pc;
 	
 	Code* catch_point;
+	Code* error_point;
 	Arena temp_mem;
 
 

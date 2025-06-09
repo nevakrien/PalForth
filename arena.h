@@ -9,8 +9,9 @@
 typedef struct Arena Arena;
 
 struct Arena{
-	void* mem;
-	Arena* next;
+	void** mem;
+	size_t len;
+	size_t capacity;
 };
 
 void* arena_alloc(Arena* arena,size_t size);
