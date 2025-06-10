@@ -259,6 +259,142 @@ void test_arithmetics(VM* vm, size_t size) {
     }
 }
 
+void test_bool_and_compare(VM* vm, size_t size) {
+    Code cmp_code[] = {
+        (Code){pick, (Code*)3},
+        (Code){pick, (Code*)3},
+        (Code){pick, (Code*)3},
+        (Code){NULL},
+        (Code){ret},
+    };
+
+    Code cmp_word = {
+        NULL,
+        cmp_code,
+    };
+
+    palint_t a = 5;
+    palint_t b = 3;
+    palbool_t result;
+
+    // Push once: target, source1, source2
+    PUSH(&result);  // target (write result here)
+    PUSH(&a);
+    PUSH(&b);
+
+    // === EQ ===
+    {
+        a = 5; b = 5;
+        cmp_code[3].xt = int_eq;
+        excute_code(vm, &cmp_word);
+        assert(result == 1);
+    }
+
+    // === NEQ ===
+    {
+        a = 5; b = 6;
+        cmp_code[3].xt = int_neq;
+        excute_code(vm, &cmp_word);
+        assert(result == 1);
+    }
+
+    // === LT ===
+    {
+        a = 2; b = 3;
+        cmp_code[3].xt = int_smaller;
+        excute_code(vm, &cmp_word);
+        assert(result == 1);
+    }
+
+    // === GT ===
+    {
+        a = 9; b = 4;
+        cmp_code[3].xt = int_bigger;
+        excute_code(vm, &cmp_word);
+        assert(result == 1);
+    }
+
+    // === LE ===
+    {
+        a = 4; b = 4;
+        cmp_code[3].xt = int_le;
+        excute_code(vm, &cmp_word);
+        assert(result == 1);
+    }
+
+    // === GE ===
+    {
+        a = 7; b = 2;
+        cmp_code[3].xt = int_ge;
+        excute_code(vm, &cmp_word);
+        assert(result == 1);
+    }
+
+    STACK_FREE(3);
+
+    // === LOGICAL OPS ===
+    Code bool_code[] = {
+        (Code){pick, (Code*)2},
+        (Code){pick, (Code*)2},
+        (Code){NULL},
+        (Code){ret},
+    };
+
+    Code bool_word = {
+        NULL,
+        bool_code,
+    };
+
+    palbool_t x = 1;
+    palbool_t y = 0;
+
+    PUSH(&x);
+    PUSH(&y);
+
+    // === AND ===
+    {
+        x = 1; y = 1;
+        bool_code[2].xt = bool_and;
+        excute_code(vm, &bool_word);
+        assert(x);
+    }
+
+    // === OR ===
+    {
+        x = 0; y = 1;
+        bool_code[2].xt = bool_or;
+        excute_code(vm, &bool_word);
+        assert(x);
+    }
+
+    // === XOR ===
+    {
+        x = 1; y = 1;
+        bool_code[2].xt = bool_xor;
+        excute_code(vm, &bool_word);
+        assert(!x);
+    }
+
+    STACK_FREE(2);
+
+    // === NOT === (manual op: unary)
+    {
+        x = 1;
+        Code not_code[] = {
+            (Code){bool_not},
+            (Code){ret},
+        };
+        Code not_word = {
+            NULL,
+            not_code,
+        };
+
+        PUSH(&x);
+        excute_code(vm, &not_word);
+        assert(!x);
+    }
+}
+
 
 
 void test_vm(){
@@ -269,6 +405,7 @@ void test_vm(){
     test_stack(&vm,10);
     test_core_ops(&vm,10);
     test_arithmetics(&vm,10);
+    test_bool_and_compare(&vm,10);
 }
 
 int main(){

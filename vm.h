@@ -26,6 +26,7 @@ Code* jump(Code* code,VM* vm);
 Code* call_dyn(Code* code,VM* vm);
 Code* ret(Code* code,VM* vm);
 
+// arithmetic (mut int int → )
 Code* int_add(Code* code, VM* vm);
 Code* int_sub(Code* code, VM* vm);
 Code* int_mul(Code* code, VM* vm);
@@ -36,6 +37,23 @@ Code* int_shr(Code* code, VM* vm);
 Code* int_and(Code* code, VM* vm);
 Code* int_or(Code* code, VM* vm);
 Code* int_xor(Code* code, VM* vm);
+
+// comparisons (int int → bool)
+Code* int_eq(Code* code, VM* vm);
+Code* int_neq(Code* code, VM* vm);
+Code* int_smaller(Code* code, VM* vm);
+Code* int_bigger(Code* code, VM* vm);
+Code* int_le(Code* code, VM* vm);    // suggest you add this
+Code* int_ge(Code* code, VM* vm);    // suggest you add this
+
+// logical (mut bool bool → )
+Code* bool_and(Code* code, VM* vm);
+Code* bool_or(Code* code, VM* vm);
+Code* bool_xor(Code* code, VM* vm);
+
+// logical (mut bool → )
+Code* bool_not(Code* code, VM* vm);
+
 
 
 inline void read_palint(palint_t* target,Word source){

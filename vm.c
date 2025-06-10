@@ -94,7 +94,7 @@ DEFINE_BUILTIN(name, \
 	read_palint(&a, target); \
 	read_palint(&b, source); \
 \
-	a = (a) op (b); \
+	a = a op b; \
 	write_palint(target, &a); \
 	return NULL; \
 )
@@ -122,15 +122,37 @@ DEFINE_BUILTIN(name, \
 	read_palint(&a, source1); \
 	read_palint(&b, source2); \
 \
-	palbool_t ans = (a) op (b); \
+	palbool_t ans = a op b; \
 	*(palbool_t*)target = ans;\
 	return NULL; \
 )
 
-DEFINE_ARITH(int_eq, ==)
-DEFINE_ARITH(int_neq, !=)
-DEFINE_ARITH(int_smaller, <)
-DEFINE_ARITH(int_bigger, >)
+DEFINE_COMPARE(int_eq, ==)
+DEFINE_COMPARE(int_neq, !=)
+DEFINE_COMPARE(int_smaller, <)
+DEFINE_COMPARE(int_bigger, >)
+DEFINE_COMPARE(int_le, <=)
+DEFINE_COMPARE(int_ge, >=)
+
+
+#define DEFINE_LOGIC(name, op) \
+DEFINE_BUILTIN(name, \
+	palbool_t* source = POP(); \
+	palbool_t* target = POP(); \
+	printf("got source %d target %d\n",*source,*target );\
+	*target = *source op *target; \
+	return NULL; \
+)
+
+DEFINE_LOGIC(bool_and, &)
+DEFINE_LOGIC(bool_or, |)
+DEFINE_LOGIC(bool_xor, ^)
+
+DEFINE_BUILTIN(bool_not,
+    palbool_t* target = POP();
+    *target = !(*target);
+    return NULL;
+)
 
 void panic(VM* vm,long code){
 	fflush(stdout);
