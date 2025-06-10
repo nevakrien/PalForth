@@ -143,7 +143,7 @@ void test_arithmetics(VM* vm, size_t size) {
     Code arith_code[] = {
         (Code){pick, (Code*)2},
         (Code){pick, (Code*)2},
-        (Code){NULL}, // to be filled
+        (Code){NULL}, // to be filled dynamically
         (Code){ret},
     };
 
@@ -152,58 +152,113 @@ void test_arithmetics(VM* vm, size_t size) {
         arith_code,
     };
 
+    palint_t a, b;
+
+    // Push once
+    PUSH(&a);
+    PUSH(&b);
+
     // === ADD ===
     {
-        palint_t a = 1;
-        palint_t b = 2;
+        a = 1;
+        b = 2;
         palint_t c = a + b;
-
         arith_code[2].xt = int_add;
-        PUSH(&a);
-        PUSH(&b);
         excute_code(vm, &arith_word);
         assert(a == c);
     }
 
     // === SUB ===
     {
-        palint_t a = 5;
-        palint_t b = 3;
+        a = 5;
+        b = 3;
         palint_t c = a - b;
-
         arith_code[2].xt = int_sub;
-        PUSH(&a);
-        PUSH(&b);
         excute_code(vm, &arith_word);
         assert(a == c);
     }
 
     // === MUL ===
     {
-        palint_t a = 6;
-        palint_t b = 7;
+        a = 6;
+        b = 7;
         palint_t c = a * b;
-
         arith_code[2].xt = int_mul;
-        PUSH(&a);
-        PUSH(&b);
         excute_code(vm, &arith_word);
         assert(a == c);
     }
 
     // === DIV ===
     {
-        palint_t a = 20;
-        palint_t b = 5;
+        a = 20;
+        b = 5;
         palint_t c = a / b;
-
         arith_code[2].xt = int_div;
-        PUSH(&a);
-        PUSH(&b);
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === SHL ===
+    {
+        a = 3;
+        b = 2;
+        palint_t c = a << b;
+        arith_code[2].xt = int_shl;
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === SHR ===
+    {
+        a = 16;
+        b = 2;
+        palint_t c = a >> b;
+        arith_code[2].xt = int_shr;
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === AND ===
+    {
+        a = 0b1100;
+        b = 0b1010;
+        palint_t c = a & b;
+        arith_code[2].xt = int_and;
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === OR ===
+    {
+        a = 0b1100;
+        b = 0b1010;
+        palint_t c = a | b;
+        arith_code[2].xt = int_or;
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === XOR ===
+    {
+        a = 0b1100;
+        b = 0b1010;
+        palint_t c = a ^ b;
+        arith_code[2].xt = int_xor;
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === MOD ===
+    {
+        a = 17;
+        b = 5;
+        palint_t c = a % b;
+        arith_code[2].xt = int_mod;
         excute_code(vm, &arith_word);
         assert(a == c);
     }
 }
+
 
 
 void test_vm(){

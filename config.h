@@ -22,7 +22,7 @@
 #include "stdbool.h"
 
 typedef int64_t palint_t;
-typedef intptr_t palbool_t;
+typedef intptr_t palbool_t;//must fit inside of a pointer
 
 //this macro is used for allocating room on the stack for a var
 #define CELLS(x) ((sizeof(x) + sizeof(void*) - 1) / sizeof(void*))

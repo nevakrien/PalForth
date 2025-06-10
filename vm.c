@@ -103,11 +103,42 @@ DEFINE_ARITH(int_add, +)
 DEFINE_ARITH(int_sub, -)
 DEFINE_ARITH(int_mul, *)
 DEFINE_ARITH(int_div, /)
+DEFINE_ARITH(int_mod, %)
+DEFINE_ARITH(int_shl, <<)
+DEFINE_ARITH(int_shr, >>)
+DEFINE_ARITH(int_and, &)
+DEFINE_ARITH(int_or,  |)
+DEFINE_ARITH(int_xor, ^)
 
+
+#define DEFINE_COMPARE(name, op) \
+DEFINE_BUILTIN(name, \
+	Word source2 = POP(); \
+	Word source1 = POP(); \
+	Word target = POP(); \
+\
+	palint_t a;\
+	palint_t b;\
+	read_palint(&a, source1); \
+	read_palint(&b, source2); \
+\
+	palbool_t ans = (a) op (b); \
+	*(palbool_t*)target = ans;\
+	return NULL; \
+)
+
+DEFINE_ARITH(int_eq, ==)
+DEFINE_ARITH(int_neq, !=)
+DEFINE_ARITH(int_smaller, <)
+DEFINE_ARITH(int_bigger, >)
 
 void panic(VM* vm,long code){
+	fflush(stdout);
+
 	if(vm->panic_handler)
 		longjmp(*vm->panic_handler,code);
-	else
+	else{
+		fprintf(stderr,"pal crashed without catching %ld\n",code);
 		exit(code);
+	}
 }
