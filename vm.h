@@ -12,56 +12,39 @@
 
 Code* excute_code(VM* vm,Code* code);
 
-#define DEFINE_BUILTIN(name, body) \
-	inline Code* name(Code* code, VM* vm) { \
-		VM_LOG("executing " #name); \
-		body \
-	}
-DEFINE_BUILTIN(inject,
-	Word source = POP();
-	Word target = POP();
-	memmove(target, source, (intptr_t)code->code_start);
-	return code;
-)
 
-DEFINE_BUILTIN(frame_alloc,
-	STACK_ALLOC((intptr_t)code->code_start);
-	return code;
-)
+Code* inject(Code* code,VM* vm);
+Code* frame_alloc(Code* code,VM* vm);
+Code* frame_free(Code* code,VM* vm);
+Code* push_local(Code* code,VM* vm);
+Code* push_var(Code* code,VM* vm);
 
-DEFINE_BUILTIN(frame_free,
-	STACK_FREE((intptr_t)code->code_start);
-	return code;
-)
 
-DEFINE_BUILTIN(push_local,
-	PUSH(&SPOT((intptr_t)code->code_start));
-	return code;
-)
+Code* pick(Code* code,VM* vm);
+Code* branch(Code* code,VM* vm);
+Code* jump(Code* code,VM* vm);
+Code* call_dyn(Code* code,VM* vm);
+Code* ret(Code* code,VM* vm);
 
-DEFINE_BUILTIN(pick,
-	PUSH(SPOT((intptr_t)code->code_start));
-	return code;
-)
+Code* int_add(Code* code,VM* vm);
+Code* int_sub(Code* code,VM* vm);
+Code* int_mul(Code* code,VM* vm);
+Code* int_div(Code* code,VM* vm);
 
-DEFINE_BUILTIN(branch,
-	if (*(palbool_t*)POP()) {
-		return code + (intptr_t)code->code_start;
-	}
-	return code;
-)
+inline void read_palint(palint_t* target,Word source){
+	if(CELLS(palint_t)==1&& ALIGN(palint_t)<=ALIGN(Word))
+		*target=*(palint_t*)source;
+	else
+		memcpy(target,source,sizeof(palint_t));
+}
 
-DEFINE_BUILTIN(jump,
-	return code + (intptr_t)code->code_start;
-)
+inline void write_palint(Word target,palint_t* source){
+	if(CELLS(palint_t)==1&& ALIGN(palint_t)<=ALIGN(Word))
+		*(palint_t*)target=*source;
+	else
+		memcpy(target,source,sizeof(palint_t));
+}
 
-DEFINE_BUILTIN(call_dyn,
-	return *(Code**)POP();
-)
-
-DEFINE_BUILTIN(ret,
-	return NULL;
-)
 
 
 

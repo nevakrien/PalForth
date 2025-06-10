@@ -24,6 +24,17 @@
 typedef int64_t palint_t;
 typedef intptr_t palbool_t;
 
+//this macro is used for allocating room on the stack for a var
+#define CELLS(x) ((sizeof(x) + sizeof(void*) - 1) / sizeof(void*))
+
+
+#if __STDC_VERSION__ >= 201112L
+    #include <stdalign.h>
+    #define ALIGN(type) alignof(type)
+#else
+    #define ALIGN(type) offsetof(struct { char c; type d; }, d)
+#endif
+
 
 /**
  * this defines

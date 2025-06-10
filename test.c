@@ -32,12 +32,14 @@ void test_stack(VM* vm,size_t size){
         vm->stack.cur=(Word*)vm->stack.base;
     }
 
+    vm->panic_handler = NULL;
+
     assert(jumped && "longjmp was not triggered when expected");
     printf("stack exceptions: passed\n");
 
 }
 
-void test_buildins(VM* vm,size_t size){
+void test_core_ops(VM* vm,size_t size){
     void* cannary = (void*) 321;
     
 
@@ -89,7 +91,7 @@ void test_buildins(VM* vm,size_t size){
         frame_code,
     };
 
-    Word src[5] = {(Word*)1,(Word*)1,(Word*)1,(Word*)1,(Word*)1};
+    Word src[5] = {(Word*)1,(Word*)3,(Word*)1,(Word*)1,(Word*)-1};
     Word tgt[5] = {0};
 
     PUSH(tgt);
@@ -137,12 +139,81 @@ void test_buildins(VM* vm,size_t size){
 
 }
 
+void test_arithmetics(VM* vm, size_t size) {
+    Code arith_code[] = {
+        (Code){pick, (Code*)2},
+        (Code){pick, (Code*)2},
+        (Code){NULL}, // to be filled
+        (Code){ret},
+    };
+
+    Code arith_word = {
+        NULL,
+        arith_code,
+    };
+
+    // === ADD ===
+    {
+        palint_t a = 1;
+        palint_t b = 2;
+        palint_t c = a + b;
+
+        arith_code[2].xt = int_add;
+        PUSH(&a);
+        PUSH(&b);
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === SUB ===
+    {
+        palint_t a = 5;
+        palint_t b = 3;
+        palint_t c = a - b;
+
+        arith_code[2].xt = int_sub;
+        PUSH(&a);
+        PUSH(&b);
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === MUL ===
+    {
+        palint_t a = 6;
+        palint_t b = 7;
+        palint_t c = a * b;
+
+        arith_code[2].xt = int_mul;
+        PUSH(&a);
+        PUSH(&b);
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+
+    // === DIV ===
+    {
+        palint_t a = 20;
+        palint_t b = 5;
+        palint_t c = a / b;
+
+        arith_code[2].xt = int_div;
+        PUSH(&a);
+        PUSH(&b);
+        excute_code(vm, &arith_word);
+        assert(a == c);
+    }
+}
+
+
 void test_vm(){
     void* buffer[10];
     VM vm = {0};
     vm.stack = STACK_LIT(buffer,10);
+
     test_stack(&vm,10);
-    test_buildins(&vm,10);
+    test_core_ops(&vm,10);
+    test_arithmetics(&vm,10);
 }
 
 int main(){

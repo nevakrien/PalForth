@@ -3,6 +3,9 @@
 
 extern inline Word* stack_alloc(VM* vm,int count);
 extern inline Word* stack_free(VM* vm,int count);
+extern inline void read_palint(palint_t* target,Word source);
+extern inline void write_palint(Word target,palint_t* source);
+
 Code* excute_code(VM* vm,Code* code){
 	if(code->xt){
 		return code->xt(code,vm);
@@ -11,7 +14,7 @@ Code* excute_code(VM* vm,Code* code){
 	VM_LOG("excuting colon")
 
 
-	Code* current = code->code_start;
+	Code* current = code->first_const;
 	for(;;current++){
 		current=excute_code(vm,current);
 		if(current==NULL)
@@ -22,16 +25,85 @@ Code* excute_code(VM* vm,Code* code){
 	return current;
 }
 
-extern inline Code* inject(Code* code,VM* vm);
-extern inline Code* frame_alloc(Code* code,VM* vm);
-extern inline Code* frame_free(Code* code,VM* vm);
-extern inline Code* push_local(Code* code,VM* vm);
+#define DEFINE_BUILTIN(name, body) \
+	Code* name(Code* code, VM* vm) { \
+		VM_LOG("executing " #name); \
+		body \
+	}
 
-extern inline Code* pick(Code* code,VM* vm);
-extern inline Code* branch(Code* code,VM* vm);
-extern inline Code* jump(Code* code,VM* vm);
-extern inline Code* call_dyn(Code* code,VM* vm);
-extern inline Code* ret(Code* code,VM* vm);
+DEFINE_BUILTIN(inject,
+	Word source = POP();
+	Word target = POP();
+	memmove(target, source, (intptr_t)code->first_const);
+	return code;
+)
+
+DEFINE_BUILTIN(frame_alloc,
+	STACK_ALLOC((intptr_t)code->first_const);
+	return code;
+)
+
+DEFINE_BUILTIN(frame_free,
+	STACK_FREE((intptr_t)code->first_const);
+	return code;
+)
+
+DEFINE_BUILTIN(push_local,
+	PUSH(&SPOT((intptr_t)code->first_const));
+	return code;
+)
+
+DEFINE_BUILTIN(push_var,
+	PUSH(code->first_const);
+	return code;
+)
+
+
+DEFINE_BUILTIN(pick,
+	PUSH(SPOT((intptr_t)code->first_const));
+	return code;
+)
+
+DEFINE_BUILTIN(branch,
+	if (*(palbool_t*)POP()) {
+		return code + (intptr_t)code->first_const;
+	}
+	return code;
+)
+
+DEFINE_BUILTIN(jump,
+	return code + (intptr_t)code->first_const;
+)
+
+DEFINE_BUILTIN(call_dyn,
+	return *(Code**)POP();
+)
+
+DEFINE_BUILTIN(ret,
+	return NULL;
+)
+
+
+#define DEFINE_ARITH(name, op) \
+DEFINE_BUILTIN(name, \
+	Word source = POP(); \
+	Word target = POP(); \
+\
+	palint_t a;\
+	palint_t b;\
+	read_palint(&a, target); \
+	read_palint(&b, source); \
+\
+	a = (a) op (b); \
+	write_palint(target, &a); \
+	return NULL; \
+)
+
+DEFINE_ARITH(int_add, +)
+DEFINE_ARITH(int_sub, -)
+DEFINE_ARITH(int_mul, *)
+DEFINE_ARITH(int_div, /)
+
 
 void panic(VM* vm,long code){
 	if(vm->panic_handler)
