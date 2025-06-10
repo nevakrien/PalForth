@@ -5,16 +5,18 @@
 #define TEST
 // #define UNCHECKED_STACK_OVERFLOW
 
-
 #ifdef TEST
 #define DEBUG_MODE
 #endif
-
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "stdbool.h"
+
+typedef int64_t palint_t;
+typedef intptr_t palbool_t;
+
 
 /**
  * this defines

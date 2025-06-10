@@ -23,6 +23,14 @@ inline Code* excute_code(Code* code,VM* vm){
 	return code;
 }
 
+inline Code* branch(Code* code,VM* vm){
+	if(*(palbool_t*)POP()){
+		return code->code_start;
+	}
+
+	return code;
+}
+
 
 #ifdef TEST
 void test_vm();
