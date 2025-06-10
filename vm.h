@@ -12,71 +12,57 @@
 
 Code* excute_code(VM* vm,Code* code);
 
-inline Code* inject(Code* code,VM* vm){
-	VM_LOG("excuting inject")
-
+#define DEFINE_BUILTIN(name, body) \
+	inline Code* name(Code* code, VM* vm) { \
+		VM_LOG("executing " #name); \
+		body \
+	}
+DEFINE_BUILTIN(inject,
 	Word source = POP();
 	Word target = POP();
-	memmove(target,source,(intptr_t)code->code_start);
-
+	memmove(target, source, (intptr_t)code->code_start);
 	return code;
-}
+)
 
-inline Code* frame_alloc(Code* code,VM* vm){
-	VM_LOG("excuting set_sp")
-
+DEFINE_BUILTIN(frame_alloc,
 	STACK_ALLOC((intptr_t)code->code_start);
 	return code;
-}
+)
 
-inline Code* frame_free(Code* code,VM* vm){
-	VM_LOG("excuting set_sp")
-
+DEFINE_BUILTIN(frame_free,
 	STACK_FREE((intptr_t)code->code_start);
 	return code;
-}
+)
 
-inline Code* push_local(Code* code,VM* vm){
-	VM_LOG("excuting pick")
-
+DEFINE_BUILTIN(push_local,
 	PUSH(&SPOT((intptr_t)code->code_start));
 	return code;
-}
+)
 
-inline Code* pick(Code* code,VM* vm){
-	VM_LOG("excuting pick")
-
+DEFINE_BUILTIN(pick,
 	PUSH(SPOT((intptr_t)code->code_start));
 	return code;
-}
+)
 
-inline Code* branch(Code* code,VM* vm){
-	VM_LOG("excuting branch")
-	
-	if(*(palbool_t*)POP()){
-		return code+(intptr_t)code->code_start;
+DEFINE_BUILTIN(branch,
+	if (*(palbool_t*)POP()) {
+		return code + (intptr_t)code->code_start;
 	}
-
 	return code;
-}
+)
 
-inline Code* jump(Code* code,VM* vm){
-	VM_LOG("excuting jump")
+DEFINE_BUILTIN(jump,
+	return code + (intptr_t)code->code_start;
+)
 
-	return code+(intptr_t)code->code_start;
-}
-
-inline Code* call_dyn(Code* code,VM* vm){
-	VM_LOG("excuting call_dyn")
-
+DEFINE_BUILTIN(call_dyn,
 	return *(Code**)POP();
-}
+)
 
-inline Code* ret(Code* code,VM* vm){
-	VM_LOG("excuting end")
-
+DEFINE_BUILTIN(ret,
 	return NULL;
-}
+)
+
 
 
 #ifdef TEST

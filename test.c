@@ -97,6 +97,8 @@ void test_buildins(VM* vm,size_t size){
     excute_code(vm,&frame_word);
     assert(memcmp(src,tgt,sizeof(src))==0);
 
+    STACK_FREE(2);
+
     printf("frame injections: passed\n");
 
 
