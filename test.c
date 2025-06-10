@@ -43,7 +43,7 @@ void test_buildins(VM* vm){
 
     Code dup_code[] = {
         (Code){pick,(Code*)1},
-        (Code){end},
+        (Code){ret},
     };
 
     Code dup_word = {
@@ -53,7 +53,7 @@ void test_buildins(VM* vm){
 
     PUSH(cannary);
 
-    assert(excute_code(&dup_word,vm)==NULL);
+    assert(excute_code(vm,&dup_word)==NULL);
 
     assert(POP()==cannary);
     assert(POP()==cannary);
@@ -65,9 +65,9 @@ void test_buildins(VM* vm){
 
 
     Code maybe_dup[] = {
-        (Code){branch,NULL},
+        (Code){branch,(Code*)1},
         (Code){pick,(Code*)1},
-        (Code){end},
+        (Code){ret},
     };
 
     Code maybe_dup_word = {
@@ -78,13 +78,13 @@ void test_buildins(VM* vm){
     palbool_t b = 1;
 
     PUSH(&b);
-    assert(excute_code(&maybe_dup_word,vm)==NULL);
+    assert(excute_code(vm,&maybe_dup_word)==NULL);
     assert((intptr_t)vm->stack.cur==vm->stack.base);
 
     PUSH(cannary);
     b=0;
     PUSH(&b);
-    assert(excute_code(&maybe_dup_word,vm)==NULL);
+    assert(excute_code(vm,&maybe_dup_word)==NULL);
     assert(POP()==cannary);
     assert(POP()==cannary);
 
