@@ -9,10 +9,12 @@
 #include "stack.h"
 #include "string.h"
 
-
+//entry point
 Code* excute_code(VM* vm,Code* code);
 
+// === BUILD IN COMMANDS === 
 
+//stack managment
 Code* inject(Code* code,VM* vm);
 Code* frame_alloc(Code* code,VM* vm);
 Code* frame_free(Code* code,VM* vm);
@@ -21,10 +23,14 @@ Code* push_local(Code* code,VM* vm);
 Code* push_var(Code* code,VM* vm);
 
 
+//control flow
 Code* branch(Code* code,VM* vm);
 Code* jump(Code* code,VM* vm);
 Code* call_dyn(Code* code,VM* vm);
 Code* ret(Code* code,VM* vm);
+
+//IO
+Code* const_print(Code* code,VM* vm);
 
 // arithmetic (mut int int → )
 Code* int_add(Code* code, VM* vm);
@@ -55,6 +61,7 @@ Code* bool_xor(Code* code, VM* vm);
 Code* bool_not(Code* code, VM* vm);
 
 
+// === IMPORTANT FUNCTIONS === 
 
 inline void read_palint(palint_t* target,Word source){
 	if(CELLS(palint_t)==1&& ALIGN(palint_t)<=ALIGN(Word))
@@ -69,11 +76,6 @@ inline void write_palint(Word target,palint_t* source){
 	else
 		memcpy(target,source,sizeof(palint_t));
 }
-
-
-#ifdef TEST
-void test_vm();
-#endif
 
 #endif // VM_H
 

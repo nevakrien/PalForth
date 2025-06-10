@@ -83,6 +83,11 @@ DEFINE_BUILTIN(ret,
 	return NULL;
 )
 
+DEFINE_BUILTIN(const_print,
+	printf("%s",(char*)code->first_const);
+	return code;
+)
+
 
 #define DEFINE_ARITH(name, op) \
 DEFINE_BUILTIN(name, \
@@ -139,7 +144,6 @@ DEFINE_COMPARE(int_ge, >=)
 DEFINE_BUILTIN(name, \
 	palbool_t* source = POP(); \
 	palbool_t* target = POP(); \
-	printf("got source %d target %d\n",*source,*target );\
 	*target = *source op *target; \
 	return NULL; \
 )
