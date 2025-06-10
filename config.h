@@ -3,12 +3,13 @@
 
 #define DEBUG_MODE
 #define TEST
+// #define UNCHECKED_STACK_OVERFLOW
+
 
 #ifdef TEST
 #define DEBUG_MODE
 #endif
 
-// #define UNCHECKED_STACK_OVERFLOW
 
 #include <stdlib.h>
 #include <stdio.h>

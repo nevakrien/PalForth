@@ -53,7 +53,7 @@ static void test_inner(VM* vm,size_t size){
 	}
 
 	assert(jumped && "longjmp was not triggered when expected");
-	printf("test_exception_handling: passed\n");
+	printf("stack exceptions: passed\n");
 
 }
 

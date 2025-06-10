@@ -11,10 +11,12 @@ typedef int (*XT)(VM*,Code*);
 typedef void* Word;
 
 typedef struct{
-	intptr_t base; //avoid weird UB rules on comparing
 	Word* cur;
+	intptr_t base; //avoid weird UB rules on comparing
 	intptr_t end; //1 above last valid address
 } Stack;
+#define STACK_LIT(buffer,n) (Stack){buffer,(intptr_t)buffer,(intptr_t)(buffer+n)}
+
 
 void panic(VM* vm,long code);
 
@@ -45,7 +47,6 @@ struct vm {
 
 
 
-#define STACK_LIT(buffer,n) (Stack){(intptr_t)buffer,buffer,(intptr_t)(buffer+n)}
 
 inline Word* stack_alloc(VM* vm,int count){
 	intptr_t new_cur = (intptr_t)(vm->stack.cur)+count*sizeof(Word);
