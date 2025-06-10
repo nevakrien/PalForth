@@ -27,7 +27,7 @@ typedef struct{
 struct code {
 	XT xt;
 	Code* code_start;
-	Code* code_end;
+	// Code* code_end;
 	//data goes here
 };
 

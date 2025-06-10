@@ -4,9 +4,16 @@
 #define DEBUG_MODE
 #define TEST
 // #define UNCHECKED_STACK_OVERFLOW
+#define VM_DEBUG
 
 #ifdef TEST
 #define DEBUG_MODE
+#endif
+
+#ifdef VM_DEBUG
+#define VM_LOG(s) puts(s);
+#else
+#define VM_LOG(s)
 #endif
 
 #include <stdlib.h>

@@ -11,24 +11,50 @@
 
 inline Code* excute_code(Code* code,VM* vm){
 	if(code->xt){
-		code->xt(code,vm);
-		return code;
+		return code->xt(code,vm);
 	}
+
+	VM_LOG("excuting colon")
+
 
 	Code* current = code->code_start;
-	for(;current!=NULL;current++){
+	for(;;current++){
 		current=excute_code(current,vm);
+		if(current==NULL)
+			break;
+
 	}
 
+	return current;
+}
+
+inline Code* pick(Code* code,VM* vm){
+	VM_LOG("excuting pick")
+
+	PUSH(SPOT((intptr_t)code->code_start));
 	return code;
 }
 
 inline Code* branch(Code* code,VM* vm){
+	VM_LOG("excuting branch")
+	
 	if(*(palbool_t*)POP()){
 		return code->code_start;
 	}
 
 	return code;
+}
+
+inline Code* jump(Code* code,VM* vm){
+	VM_LOG("excuting jump")
+
+	return *(Code**)POP();
+}
+
+inline Code* end(Code* code,VM* vm){
+	VM_LOG("excuting end")
+
+	return NULL;
 }
 
 

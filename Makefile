@@ -1,5 +1,5 @@
 # Default: no arena
-CFLAGS := -O2 -g -Wall -fsanitize=address
+CFLAGS := -g2 -g -Wall -fsanitize=address
 OBJ = header_impels.o vm.o arena.o
 
 HEADERS := $(wildcard *.h)
