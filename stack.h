@@ -1,0 +1,39 @@
+#ifndef STACK_H
+#define STACK_H
+
+#include "config.h"
+#include "ctypes.h"
+#include "errors.h"
+
+#define STACK_ALLOC(n) stack_alloc(vm,n)
+#define STACK_FREE(n) stack_free(vm,n)
+#define SPOT(n) *(vm->stack.cur-(n))
+#define PUSH(p) { *STACK_ALLOC(1)=p;}
+#define POP() *STACK_FREE(1)
+
+inline Word* stack_alloc(VM* vm,int count){
+	intptr_t new_cur = (intptr_t)(vm->stack.cur)+count*sizeof(Word);
+	
+#ifndef UNCHECKED_STACK_OVERFLOW
+	if(new_cur > vm->stack.end)
+		panic(vm,STACK_OVERFLOW);
+#endif
+
+	Word* ans = vm->stack.cur;
+	vm->stack.cur = (Word*) new_cur;
+	return ans;
+}
+
+inline Word* stack_free(VM* vm,int count){
+	intptr_t new_cur = (intptr_t)(vm->stack.cur)-count*sizeof(Word);
+#ifdef DEBUG_MODE
+	if(new_cur < vm->stack.base)
+		panic(vm,STACK_UNDERFLOW);
+
+#endif
+	vm->stack.cur = (Word*) new_cur;
+	return vm->stack.cur;
+}
+
+#endif // STACK_H
+

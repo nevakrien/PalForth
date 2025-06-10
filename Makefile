@@ -2,7 +2,8 @@
 CFLAGS := -O2 -g -Wall -fsanitize=address
 OBJ = header_impels.o vm.o arena.o
 
-HEADERS = arena.h config.h cutf8.h vm.h
+HEADERS := $(wildcard *.h)
+
 
 # Optional: Enable arena support via `make USE_ARENA=1`
 ifeq ($(USE_ARENA),1)

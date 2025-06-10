@@ -3,6 +3,7 @@
 
 extern inline Word* stack_alloc(VM* vm,int count);
 extern inline Word* stack_free(VM* vm,int count);
+extern inline Code* excute_code(Code* code,VM* vm);
 
 void panic(VM* vm,long code){
 	if(vm->panic_handler)
@@ -11,18 +12,8 @@ void panic(VM* vm,long code){
 		exit(code);
 }
 
-#define GOTO(x) vm->pc=x;
-#define PANIC(code) panic(vm,code)
-
-#define STACK_ALLOC(n) stack_alloc(vm,n)
-#define STACK_FREE(n) stack_free(vm,n)
-
-#define SPOT(n) *(vm->stack.cur-(n))
-#define PUSH(p) { *STACK_ALLOC(1)=p;}
-#define POP() *STACK_FREE(1)
-
 #ifdef TEST
-static void test_inner(VM* vm,size_t size){
+static void test_stack(VM* vm,size_t size){
 	void* mem = (void*) 5;
 	PUSH(mem);
 	mem=0;
@@ -61,6 +52,6 @@ void test_vm(){
 	void* buffer[5];
 	VM vm = {0};
 	vm.stack = STACK_LIT(buffer,5);
-	test_inner(&vm,5);
+	test_stack(&vm,5);
 }
 #endif //TEST
