@@ -22,8 +22,10 @@ Code* excute_code(VM* vm,Code* code){
 	return current;
 }
 
+extern inline Code* inject(Code* code,VM* vm);
 extern inline Code* frame_alloc(Code* code,VM* vm);
 extern inline Code* frame_free(Code* code,VM* vm);
+extern inline Code* push_local(Code* code,VM* vm);
 
 extern inline Code* pick(Code* code,VM* vm);
 extern inline Code* branch(Code* code,VM* vm);

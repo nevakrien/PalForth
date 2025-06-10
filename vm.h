@@ -7,9 +7,20 @@
 #include "errors.h"
 #include "ctypes.h"
 #include "stack.h"
+#include "string.h"
 
 
 Code* excute_code(VM* vm,Code* code);
+
+inline Code* inject(Code* code,VM* vm){
+	VM_LOG("excuting inject")
+
+	Word source = POP();
+	Word target = POP();
+	memmove(target,source,(intptr_t)code->code_start);
+
+	return code;
+}
 
 inline Code* frame_alloc(Code* code,VM* vm){
 	VM_LOG("excuting set_sp")
@@ -22,6 +33,13 @@ inline Code* frame_free(Code* code,VM* vm){
 	VM_LOG("excuting set_sp")
 
 	STACK_FREE((intptr_t)code->code_start);
+	return code;
+}
+
+inline Code* push_local(Code* code,VM* vm){
+	VM_LOG("excuting pick")
+
+	PUSH(&SPOT((intptr_t)code->code_start));
 	return code;
 }
 

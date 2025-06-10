@@ -37,9 +37,11 @@ void test_stack(VM* vm,size_t size){
 
 }
 
-void test_buildins(VM* vm){
+void test_buildins(VM* vm,size_t size){
     void* cannary = (void*) 321;
     
+
+    //test simple pick
 
     Code dup_code[] = {
         (Code){pick,(Code*)1},
@@ -60,6 +62,46 @@ void test_buildins(VM* vm){
 
     printf("pick happy: passed\n");
 
+
+    assert(size>=10);
+
+    Code frame_code[]= {
+        //prelude
+        (Code){frame_alloc,(Code*)5},
+        
+        //inject to the stack
+        (Code){push_local,(Code*)5},
+        (Code){pick,(Code*)7},//top arg 5frame+1pushed+1offset
+        (Code){inject,(Code*)(5*sizeof(Word))},
+
+        //inject back out
+        (Code){pick,(Code*)7},//bottom arg 5frame+2offset
+        (Code){push_local,(Code*)6},
+        (Code){inject,(Code*)(5*sizeof(Word))},
+
+        //epilogue
+        (Code){frame_free,(Code*)5},
+        (Code){ret},
+    };
+
+    Code frame_word = {
+        NULL,
+        frame_code,
+    };
+
+    Word src[5] = {(Word*)1,(Word*)1,(Word*)1,(Word*)1,(Word*)1};
+    Word tgt[5] = {0};
+
+    PUSH(tgt);
+    PUSH(src);
+    excute_code(vm,&frame_word);
+    assert(memcmp(src,tgt,sizeof(src))==0);
+
+    printf("frame injections: passed\n");
+
+
+
+    //test branches
 
     assert((intptr_t)vm->stack.cur==vm->stack.base);
 
@@ -88,17 +130,17 @@ void test_buildins(VM* vm){
     assert(POP()==cannary);
     assert(POP()==cannary);
 
-    printf("branch happy: passed\n");
+    printf("branch if: passed\n");
 
 
 }
 
 void test_vm(){
-    void* buffer[5];
+    void* buffer[10];
     VM vm = {0};
-    vm.stack = STACK_LIT(buffer,5);
-    test_stack(&vm,5);
-    test_buildins(&vm);
+    vm.stack = STACK_LIT(buffer,10);
+    test_stack(&vm,10);
+    test_buildins(&vm,10);
 }
 
 int main(){
