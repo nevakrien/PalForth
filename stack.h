@@ -5,6 +5,8 @@
 #include "ctypes.h"
 #include "errors.h"
 
+#define STACK_LIT(buffer,n) (Stack){buffer,(intptr_t)buffer,(intptr_t)(buffer+n)}
+
 #define STACK_ALLOC(n) stack_alloc(vm,n)
 #define STACK_FREE(n) stack_free(vm,n)
 #define SPOT(n) *(vm->stack.cur-(n))

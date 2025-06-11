@@ -10,7 +10,7 @@ void test_stack(VM* vm,size_t size){
 
     STACK_ALLOC(size);
     SPOT(1)=(void*) 2;
-    SPOT(size-1)=(void*) 2;
+    SPOT(size)=(void*) 2;
     STACK_FREE(size);
 
     printf("stack actions: passed\n");

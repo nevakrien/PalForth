@@ -22,7 +22,6 @@ typedef struct{
 	intptr_t base; //avoid weird UB rules on comparing
 	intptr_t end; //1 above last valid address
 } Stack;
-#define STACK_LIT(buffer,n) (Stack){buffer,(intptr_t)buffer,(intptr_t)(buffer+n)}
 
 struct code {
 	XT xt;
