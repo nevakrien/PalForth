@@ -19,8 +19,8 @@ typedef void* Word;
 
 typedef struct{
 	Word* cur;
-	intptr_t base; //avoid weird UB rules on comparing
-	intptr_t end; //1 above last valid address
+	intptr_t below; //1 below the last
+	intptr_t end; //highest valid
 } Stack;
 
 struct code {

@@ -2,11 +2,13 @@
 #include "cutf8.h"
 
 void test_stack(VM* vm,size_t size){    
-    void* mem = (void*) 5;
-    PUSH(mem);
-    mem=0;
-    mem=POP();
-    assert(mem==(void*) 5);
+    PUSH((Word) 5);
+    assert(POP()==(Word) 5);
+
+    PUSH((Word) 5);
+    PUSH((Word) 3);
+    assert(POP()==(Word) 3);
+    assert(POP()==(Word) 5);
 
     STACK_ALLOC(size);
     SPOT(1)=(void*) 2;
@@ -29,7 +31,7 @@ void test_stack(VM* vm,size_t size){
     } else {
         // We landed here via longjmp
         jumped = true;
-        vm->stack.cur=(Word*)vm->stack.base;
+        STACK_REST()
     }
 
     vm->panic_handler = NULL;
@@ -46,7 +48,7 @@ void test_core_ops(VM* vm,size_t size){
     //test simple pick
 
     Code dup_code[] = {
-        (Code){pick,(Code*)1},
+        (Code){pick,(Code*)0},
         (Code){ret},
     };
 
@@ -72,13 +74,13 @@ void test_core_ops(VM* vm,size_t size){
         (Code){frame_alloc,(Code*)5},
         
         //inject to the stack
-        (Code){push_local,(Code*)5},
-        (Code){pick,(Code*)7},//top arg 5frame+1pushed+1offset
+        (Code){push_local,(Code*)0},
+        (Code){pick,(Code*)6},//top arg 5frame+1pushed+1offset
         (Code){inject,(Code*)(5*sizeof(Word))},
 
         //inject back out
-        (Code){pick,(Code*)7},//bottom arg 5frame+2offset
-        (Code){push_local,(Code*)6},
+        (Code){pick,(Code*)6},//bottom arg 5frame+2offset
+        (Code){push_local,(Code*)1},
         (Code){inject,(Code*)(5*sizeof(Word))},
 
         //epilogue
@@ -107,12 +109,12 @@ void test_core_ops(VM* vm,size_t size){
 
     //test branches
 
-    assert((intptr_t)vm->stack.cur==vm->stack.base);
+    assert(STACK_EMPTY());
 
 
     Code maybe_dup[] = {
         (Code){branch,(Code*)1},
-        (Code){pick,(Code*)1},
+        (Code){pick,(Code*)0},
         (Code){ret},
     };
 
@@ -125,7 +127,7 @@ void test_core_ops(VM* vm,size_t size){
 
     PUSH(&b);
     assert(excute_code(vm,&maybe_dup_word)==NULL);
-    assert((intptr_t)vm->stack.cur==vm->stack.base);
+    assert(STACK_EMPTY());
 
     PUSH(cannary);
     b=0;
@@ -141,8 +143,8 @@ void test_core_ops(VM* vm,size_t size){
 
 void test_arithmetics(VM* vm, size_t size) {
     Code arith_code[] = {
-        (Code){pick, (Code*)2},
-        (Code){pick, (Code*)2},
+        (Code){pick, (Code*)1},
+        (Code){pick, (Code*)1},
         (Code){NULL}, // to be filled dynamically
         (Code){ret},
     };
@@ -261,9 +263,9 @@ void test_arithmetics(VM* vm, size_t size) {
 
 void test_bool_and_compare(VM* vm, size_t size) {
     Code cmp_code[] = {
-        (Code){pick, (Code*)3},
-        (Code){pick, (Code*)3},
-        (Code){pick, (Code*)3},
+        (Code){pick, (Code*)2},
+        (Code){pick, (Code*)2},
+        (Code){pick, (Code*)2},
         (Code){NULL},
         (Code){ret},
     };
@@ -334,8 +336,8 @@ void test_bool_and_compare(VM* vm, size_t size) {
 
     // === LOGICAL OPS ===
     Code bool_code[] = {
-        (Code){pick, (Code*)2},
-        (Code){pick, (Code*)2},
+        (Code){pick, (Code*)1},
+        (Code){pick, (Code*)1},
         (Code){NULL},
         (Code){ret},
     };
