@@ -17,7 +17,7 @@ void test_stack(VM* vm,size_t size){
 
     printf("stack actions: passed\n");
 
-
+#ifdef DEBUG_MODE
     //check crash
     jmp_buf jmp;
     bool jumped = false;
@@ -39,6 +39,7 @@ void test_stack(VM* vm,size_t size){
     assert(jumped && "longjmp was not triggered when expected");
     printf("stack exceptions: passed\n");
 
+#endif //DEBUG_MODE
 }
 
 void test_core_ops(VM* vm,size_t size){

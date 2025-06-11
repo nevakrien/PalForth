@@ -15,21 +15,29 @@ Code* excute_code(VM* vm,Code* code);
 // === BUILD IN COMMANDS === 
 
 //stack managment
+
+// assign (mut x x → )
 Code* inject(Code* code,VM* vm);
+
+// allocs ( → )
 Code* frame_alloc(Code* code,VM* vm);
 Code* frame_free(Code* code,VM* vm);
+
+// push ( → x )
 Code* pick(Code* code,VM* vm);
 Code* push_local(Code* code,VM* vm);
 Code* push_var(Code* code,VM* vm);
 
 
-//control flow
+//control flow ( x → )
 Code* branch(Code* code,VM* vm);
-Code* jump(Code* code,VM* vm);
 Code* call_dyn(Code* code,VM* vm);
+
+//jumps ( → )
+Code* jump(Code* code,VM* vm);
 Code* ret(Code* code,VM* vm);
 
-//IO
+//IO ( → )
 Code* const_print(Code* code,VM* vm);
 
 // arithmetic (mut int int → )

@@ -9,13 +9,13 @@
 #define STACK_REST() vm->stack.cur = (Word*)vm->stack.end;
 #define STACK_EMPTY() ((intptr_t)vm->stack.cur==vm->stack.end)
 
-#define STACK_ALLOC(n) stack_alloc(vm,n)
-#define STACK_FREE(n) stack_free(vm,n)
+#define STACK_ALLOC(n) stack_alloc(vm,(intptr_t)n)
+#define STACK_FREE(n) stack_free(vm,(intptr_t)n)
 #define SPOT(n) *(vm->stack.cur+(n))
 #define PUSH(p) { *STACK_ALLOC(1)=p;}
 #define POP() *STACK_FREE(1)
 
-inline Word* stack_alloc(VM* vm,int count){
+inline Word* stack_alloc(VM* vm,intptr_t count){
 	intptr_t new_cur = (intptr_t)(vm->stack.cur)-count*sizeof(Word);
 	
 #ifndef UNCHECKED_STACK_OVERFLOW
@@ -27,7 +27,7 @@ inline Word* stack_alloc(VM* vm,int count){
 	return vm->stack.cur;
 }
 
-inline Word* stack_free(VM* vm,int count){
+inline Word* stack_free(VM* vm,intptr_t count){
 	intptr_t new_cur = (intptr_t)(vm->stack.cur)+count*sizeof(Word);
 #ifdef DEBUG_MODE
 	if(new_cur > vm->stack.end)

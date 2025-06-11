@@ -1,14 +1,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define DEBUG_MODE
+// #define DEBUG_MODE
 #define TEST
-// #define UNCHECKED_STACK_OVERFLOW
+#define UNCHECKED_STACK_OVERFLOW
 // #define VM_DEBUG
-
-#ifdef TEST
-#define DEBUG_MODE
-#endif
 
 #ifdef VM_DEBUG
 #define VM_LOG(s) puts(s);

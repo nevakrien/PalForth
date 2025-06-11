@@ -1,8 +1,9 @@
 #include "vm.h"
 #include "utils.h"
 
-extern inline Word* stack_alloc(VM* vm,int count);
-extern inline Word* stack_free(VM* vm,int count);
+extern inline Word* stack_alloc(VM* vm,intptr_t count);
+extern inline Word* stack_free(VM* vm,intptr_t count);
+
 extern inline void read_palint(palint_t* target,Word source);
 extern inline void write_palint(Word target,palint_t* source);
 
@@ -101,7 +102,7 @@ DEFINE_BUILTIN(name, \
 \
 	a = a op b; \
 	write_palint(target, &a); \
-	return NULL; \
+	return code; \
 )
 
 DEFINE_ARITH(int_add, +)
@@ -129,7 +130,7 @@ DEFINE_BUILTIN(name, \
 \
 	palbool_t ans = a op b; \
 	*(palbool_t*)target = ans;\
-	return NULL; \
+	return code; \
 )
 
 DEFINE_COMPARE(int_eq, ==)
@@ -145,7 +146,7 @@ DEFINE_BUILTIN(name, \
 	palbool_t* source = POP(); \
 	palbool_t* target = POP(); \
 	*target = *source op *target; \
-	return NULL; \
+	return code; \
 )
 
 DEFINE_LOGIC(bool_and, &)
@@ -155,7 +156,7 @@ DEFINE_LOGIC(bool_xor, ^)
 DEFINE_BUILTIN(bool_not,
     palbool_t* target = POP();
     *target = !(*target);
-    return NULL;
+    return code;
 )
 
 void panic(VM* vm,long code){
