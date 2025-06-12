@@ -1,8 +1,8 @@
 #include "vm.h"
 #include "utils.h"
 
-extern inline Word* stack_alloc(VM* vm,intptr_t count);
-extern inline Word* stack_free(VM* vm,intptr_t count);
+extern inline Word* stack_alloc(VM* vm,Stack* stack,intptr_t count);
+extern inline Word* stack_free(VM* vm,Stack* stack,intptr_t count);
 
 extern inline void read_palint(palint_t* target,Word source);
 extern inline void write_palint(Word target,palint_t* source);
@@ -12,7 +12,7 @@ Code* excute_code(VM* vm,Code* code){
 		return code->xt(code,vm);
 	}
 
-	VM_LOG("excuting colon")
+	VM_LOG(puts("excuting colon"))
 
 
 	Code* current = code->first_const;
@@ -28,13 +28,14 @@ Code* excute_code(VM* vm,Code* code){
 
 #define DEFINE_BUILTIN(name, body) \
 	Code* name(Code* code, VM* vm) { \
-		VM_LOG("executing " #name); \
+		VM_LOG(puts("executing " #name)); \
 		body \
 	}
 
 DEFINE_BUILTIN(inject,
 	Word source = POP();
 	Word target = SPOT(0);
+	VM_LOG(printf("target %p source %p\n",target,source));
 	memcpy(target, source, (intptr_t)code->first_const);
 	return code;
 )
@@ -57,13 +58,14 @@ DEFINE_BUILTIN(frame_free,
 )
 
 DEFINE_BUILTIN(param_drop,
-	STACK_FREE((intptr_t)code->first_const);
+	PARAM_DROP((intptr_t)code->first_const);
 	return code;
 )
 
 
 DEFINE_BUILTIN(push_local,
-	PUSH(&SPOT((intptr_t)code->first_const));
+	VM_LOG(printf("pushing %p\n",&DATA_SPOT((intptr_t)code->first_const)));
+	PUSH(&DATA_SPOT((intptr_t)code->first_const));
 	return code;
 )
 
@@ -74,6 +76,7 @@ DEFINE_BUILTIN(push_var,
 
 
 DEFINE_BUILTIN(pick,
+	VM_LOG(printf("pushing %p\n",SPOT((intptr_t)code->first_const)));
 	PUSH(SPOT((intptr_t)code->first_const));
 	return code;
 )

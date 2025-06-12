@@ -11,8 +11,8 @@ void test_stack(VM* vm,size_t size){
     assert(POP()==(Word) 5);
 
     STACK_ALLOC(size);
-    SPOT(1)=(void*) 2;
-    SPOT(size)=(void*) 2;
+    DATA_SPOT(1)=(void*) 2;
+    DATA_SPOT(size)=(void*) 2;
     STACK_FREE(size);
 
     printf("stack actions: passed\n");
@@ -25,13 +25,13 @@ void test_stack(VM* vm,size_t size){
     vm->panic_handler = &jmp;
 
     if (setjmp(jmp) == 0) {
-        STACK_FREE(1);
+        PARAM_DROP(1);
         fprintf(stderr, "ERROR: longjmp did not trigger on underflow\n");
         exit(1);
     } else {
         // We landed here via longjmp
         jumped = true;
-        STACK_REST()
+        STACK_REST(vm->param_stack);
     }
 
     vm->panic_handler = NULL;
@@ -76,15 +76,15 @@ void test_core_ops(VM* vm,size_t size){
         
         //inject to the stack
         (Code){push_local,(Code*)0},
-        (Code){pick,(Code*)6},//top arg 5frame+1pushed+1offset
+        (Code){pick,(Code*)1},
         (Code){inject,(Code*)(5*sizeof(Word))},
-        (Code){frame_free,(Code*)1},
+        (Code){param_drop,(Code*)1},
 
         //inject back out
-        (Code){pick,(Code*)6},//bottom arg 5frame+2offset
-        (Code){push_local,(Code*)1},
+        (Code){pick,(Code*)1},
+        (Code){push_local,(Code*)0},
         (Code){inject,(Code*)(5*sizeof(Word))},
-        (Code){frame_free,(Code*)1},
+        (Code){param_drop,(Code*)1},
 
 
         //epilogue
@@ -100,12 +100,14 @@ void test_core_ops(VM* vm,size_t size){
     Word src[5] = {(Word*)1,(Word*)3,(Word*)1,(Word*)1,(Word*)-1};
     Word tgt[5] = {0};
 
+    printf("tgt = %p src = %p \n",tgt,src);
+
     PUSH(tgt);
     PUSH(src);
     excute_code(vm,&frame_word);
     assert(memcmp(src,tgt,sizeof(src))==0);
 
-    STACK_FREE(2);
+    PARAM_DROP(2);
 
     printf("frame injections: passed\n");
 
@@ -113,7 +115,7 @@ void test_core_ops(VM* vm,size_t size){
 
     //test branches
 
-    assert(STACK_EMPTY());
+    assert(STACK_EMPTY(vm->param_stack));
 
 
     Code maybe_dup[] = {
@@ -131,7 +133,8 @@ void test_core_ops(VM* vm,size_t size){
 
     PUSH(&b);
     assert(excute_code(vm,&maybe_dup_word)==NULL);
-    assert(STACK_EMPTY());
+    assert(STACK_EMPTY(vm->param_stack));
+
 
     PUSH(cannary);
     b=0;
@@ -150,7 +153,7 @@ void test_arithmetics(VM* vm, size_t size) {
         (Code){pick, (Code*)1},
         (Code){pick, (Code*)1},
         (Code){NULL}, // to be filled dynamically
-        (Code){frame_free,(Code*)1},
+        (Code){param_drop,(Code*)1},
         (Code){ret},
     };
 
@@ -272,7 +275,7 @@ void test_bool_and_compare(VM* vm, size_t size) {
         (Code){pick, (Code*)2},
         (Code){pick, (Code*)2},
         (Code){NULL},
-        (Code){frame_free,(Code*)1},
+        (Code){param_drop,(Code*)1},
         (Code){ret},
     };
 
@@ -338,14 +341,14 @@ void test_bool_and_compare(VM* vm, size_t size) {
         assert(result == 1);
     }
 
-    STACK_FREE(3);
+    PARAM_DROP(3);
 
     // === LOGICAL OPS ===
     Code bool_code[] = {
         (Code){pick, (Code*)1},
         (Code){pick, (Code*)1},
         (Code){NULL},
-        (Code){frame_free,(Code*)1},
+        (Code){param_drop,(Code*)1},
         (Code){ret},
     };
 
@@ -384,14 +387,14 @@ void test_bool_and_compare(VM* vm, size_t size) {
         assert(!x);
     }
 
-    STACK_FREE(2);
+    PARAM_DROP(2);
 
     // === NOT === (manual op: unary)
     {
         x = 1;
         Code not_code[] = {
             (Code){bool_not},
-            (Code){frame_free,(Code*)1},
+            (Code){param_drop,(Code*)1},
             (Code){ret},
         };
         Code not_word = {
@@ -409,8 +412,10 @@ void test_bool_and_compare(VM* vm, size_t size) {
 
 void test_vm(){
     void* buffer[10];
+    void* buffer2[10];
     VM vm = {0};
-    vm.stack = STACK_LIT(buffer,10);
+    vm.data_stack = STACK_LIT(buffer,10);
+    vm.param_stack = STACK_LIT(buffer2,10);
 
     test_stack(&vm,10);
     test_core_ops(&vm,10);

@@ -35,7 +35,8 @@ struct code {
 
 
 struct vm {
-	Stack stack;
+	Stack param_stack;
+	Stack data_stack;
 	
 	Code* catch_point;
 	Code* error_point;
