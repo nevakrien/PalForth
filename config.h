@@ -4,7 +4,7 @@
 #define DEBUG_MODE
 #define TEST
 #define UNCHECKED_STACK_OVERFLOW
-#define VM_DEBUG
+// #define VM_DEBUG
 
 #ifdef VM_DEBUG
 #define VM_LOG(s) s;

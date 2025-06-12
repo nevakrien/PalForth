@@ -100,7 +100,7 @@ void test_core_ops(VM* vm,size_t size){
     Word src[5] = {(Word*)1,(Word*)3,(Word*)1,(Word*)1,(Word*)-1};
     Word tgt[5] = {0};
 
-    printf("tgt = %p src = %p \n",tgt,src);
+    // printf("tgt = %p src = %p \n",tgt,src);
 
     PUSH(tgt);
     PUSH(src);

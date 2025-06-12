@@ -43,6 +43,7 @@ DEFINE_BUILTIN(inject,
 DEFINE_BUILTIN(inject_non_unique,
 	Word source = POP();
 	Word target = SPOT(0);
+	VM_LOG(printf("target %p source %p\n",target,source));
 	memmove(target, source, (intptr_t)code->first_const);
 	return code;
 )

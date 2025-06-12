@@ -5,7 +5,7 @@
 #include "ctypes.h"
 #include "errors.h"
 
-#define STACK_LIT(buffer,n) (Stack){buffer+n-1,(intptr_t)buffer -sizeof(Word),(intptr_t)(buffer+n-1)}
+#define STACK_LIT(buffer,n) (Stack){buffer+n-1,(intptr_t)buffer -(intptr_t)sizeof(Word),(intptr_t)(buffer+n-1)}
 #define STACK_REST(stack) stack.cur = (Word*)stack.end;
 
 #define STACK_EMPTY(stack) ((intptr_t)stack.cur==stack.end)
