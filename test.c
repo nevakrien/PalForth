@@ -78,11 +78,14 @@ void test_core_ops(VM* vm,size_t size){
         (Code){push_local,(Code*)0},
         (Code){pick,(Code*)6},//top arg 5frame+1pushed+1offset
         (Code){inject,(Code*)(5*sizeof(Word))},
+        (Code){frame_free,(Code*)1},
 
         //inject back out
         (Code){pick,(Code*)6},//bottom arg 5frame+2offset
         (Code){push_local,(Code*)1},
         (Code){inject,(Code*)(5*sizeof(Word))},
+        (Code){frame_free,(Code*)1},
+
 
         //epilogue
         (Code){frame_free,(Code*)5},
@@ -147,6 +150,7 @@ void test_arithmetics(VM* vm, size_t size) {
         (Code){pick, (Code*)1},
         (Code){pick, (Code*)1},
         (Code){NULL}, // to be filled dynamically
+        (Code){frame_free,(Code*)1},
         (Code){ret},
     };
 
@@ -268,6 +272,7 @@ void test_bool_and_compare(VM* vm, size_t size) {
         (Code){pick, (Code*)2},
         (Code){pick, (Code*)2},
         (Code){NULL},
+        (Code){frame_free,(Code*)1},
         (Code){ret},
     };
 
@@ -340,6 +345,7 @@ void test_bool_and_compare(VM* vm, size_t size) {
         (Code){pick, (Code*)1},
         (Code){pick, (Code*)1},
         (Code){NULL},
+        (Code){frame_free,(Code*)1},
         (Code){ret},
     };
 
@@ -385,6 +391,7 @@ void test_bool_and_compare(VM* vm, size_t size) {
         x = 1;
         Code not_code[] = {
             (Code){bool_not},
+            (Code){frame_free,(Code*)1},
             (Code){ret},
         };
         Code not_word = {

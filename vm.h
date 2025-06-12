@@ -16,14 +16,19 @@ Code* excute_code(VM* vm,Code* code);
 
 //stack managment
 
-// assign (mut x x → )
+// assign ( x → x )
 Code* inject(Code* code,VM* vm);
+
+// assign ( x → non-unique x )
+Code* inject_non_unique(Code* code,VM* vm);
+
 
 // allocs ( → )
 Code* frame_alloc(Code* code,VM* vm);
 Code* frame_free(Code* code,VM* vm);
+Code* param_drop(Code* code,VM* vm);
 
-// push ( → x )
+// push ( → ▪x )
 Code* pick(Code* code,VM* vm);
 Code* push_local(Code* code,VM* vm);
 Code* push_var(Code* code,VM* vm);
@@ -40,7 +45,7 @@ Code* ret(Code* code,VM* vm);
 //IO ( → )
 Code* const_print(Code* code,VM* vm);
 
-// arithmetic (mut int int → )
+// arithmetic ( int → int )
 Code* int_add(Code* code, VM* vm);
 Code* int_sub(Code* code, VM* vm);
 Code* int_mul(Code* code, VM* vm);

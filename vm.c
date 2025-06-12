@@ -34,7 +34,14 @@ Code* excute_code(VM* vm,Code* code){
 
 DEFINE_BUILTIN(inject,
 	Word source = POP();
-	Word target = POP();
+	Word target = SPOT(0);
+	memcpy(target, source, (intptr_t)code->first_const);
+	return code;
+)
+
+DEFINE_BUILTIN(inject_non_unique,
+	Word source = POP();
+	Word target = SPOT(0);
 	memmove(target, source, (intptr_t)code->first_const);
 	return code;
 )
@@ -48,6 +55,12 @@ DEFINE_BUILTIN(frame_free,
 	STACK_FREE((intptr_t)code->first_const);
 	return code;
 )
+
+DEFINE_BUILTIN(param_drop,
+	STACK_FREE((intptr_t)code->first_const);
+	return code;
+)
+
 
 DEFINE_BUILTIN(push_local,
 	PUSH(&SPOT((intptr_t)code->first_const));
@@ -93,7 +106,7 @@ DEFINE_BUILTIN(const_print,
 #define DEFINE_ARITH(name, op) \
 DEFINE_BUILTIN(name, \
 	Word source = POP(); \
-	Word target = POP(); \
+	Word target = SPOT(0); \
 \
 	palint_t a;\
 	palint_t b;\
@@ -121,7 +134,7 @@ DEFINE_ARITH(int_xor, ^)
 DEFINE_BUILTIN(name, \
 	Word source2 = POP(); \
 	Word source1 = POP(); \
-	Word target = POP(); \
+	Word target = SPOT(0); \
 \
 	palint_t a;\
 	palint_t b;\
@@ -144,7 +157,7 @@ DEFINE_COMPARE(int_ge, >=)
 #define DEFINE_LOGIC(name, op) \
 DEFINE_BUILTIN(name, \
 	palbool_t* source = POP(); \
-	palbool_t* target = POP(); \
+	palbool_t* target = SPOT(0); \
 	*target = *source op *target; \
 	return code; \
 )
@@ -154,7 +167,7 @@ DEFINE_LOGIC(bool_or, |)
 DEFINE_LOGIC(bool_xor, ^)
 
 DEFINE_BUILTIN(bool_not,
-    palbool_t* target = POP();
+    palbool_t* target = SPOT(0);
     *target = !(*target);
     return code;
 )
