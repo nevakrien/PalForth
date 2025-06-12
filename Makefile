@@ -1,5 +1,5 @@
 # Default: no arena
-SHARED_FLAGS := -g2 -g -Wall -fsanitize=address -fsanitize=undefined
+SHARED_FLAGS := -g2 -g -Wall #-fsanitize=address -fsanitize=undefined
 CFLAGS := -std=c99 $(SHARED_FLAGS)
 OBJ = header_impels.o vm.o arena.o
 CC = clang
