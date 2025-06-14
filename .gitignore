@@ -1,3 +1,4 @@
+rust_rewerite_maybe/target/
 *.ll
 # Prerequisites
 *.d

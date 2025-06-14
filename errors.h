@@ -7,7 +7,9 @@
 
 typedef enum error {
 	STACK_UNDERFLOW=2,
-	STACK_OVERFLOW
+	STACK_OVERFLOW,
+	ALREADY_BORROWED,
+	BAD_SIG,
 } Error;
 
 void panic(VM* vm,long code);

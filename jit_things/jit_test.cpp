@@ -9,10 +9,18 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
-
+#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/TargetParser/Host.h"
+#include "llvm/CodeGen/CommandFlags.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Support/CodeGen.h"
 
-
+#include <optional>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -42,41 +50,41 @@ void optimizeModule(Module &mod, LLVMContext &ctx) {
     mpm.run(mod, mam);
 }
 
+void printFunctionIR(Function *F, const char *label) {
+    outs() << "\n=== LLVM IR " << label << " for " << F->getName() << " ===\n";
+    F->print(outs());
+}
+
 int main() {
+    // 🧠 REQUIRED for TargetMachine to work
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
+
 
     auto jit = cantFail(LLJITBuilder().create());
 
     LLVMContext ctx;
     SMDiagnostic err;
-    // Step 1: Parse coreMod
-std::unique_ptr<Module> coreMod = parseAssemblyFile("vm.ll", err, ctx);
-if (!coreMod) {
-    err.print("jit_test", errs());
-    return 1;
-}
+    std::unique_ptr<Module> coreMod = parseAssemblyFile("vm.ll", err, ctx);
+    if (!coreMod) {
+        err.print("jit_test", errs());
+        return 1;
+    }
 
-// Step 2: Create wrapper module
-std::unique_ptr<Module> mod = std::make_unique<Module>("test_wrapper", ctx);
-
-// Step 3: Link coreMod into mod
-if (Linker::linkModules(*mod, std::move(coreMod))) {
-    errs() << "Failed to link core module into wrapper module.\n";
-    return 1;
-}
-
-// Continue building wrapperFn inside `mod`...
+    std::unique_ptr<Module> mod = std::make_unique<Module>("test_wrapper", ctx);
+    if (Linker::linkModules(*mod, std::move(coreMod))) {
+        errs() << "Failed to link core module into wrapper module.\n";
+        return 1;
+    }
 
     IRBuilder<> builder(ctx);
-
-    Type *codeTy = StructType::get(PointerType::getUnqual(Type::getInt8Ty(ctx)), PointerType::getUnqual(Type::getInt8Ty(ctx)));
     Type *voidptr = PointerType::getUnqual(Type::getInt8Ty(ctx));
+    Type *codeTy = StructType::get(voidptr, voidptr);
     FunctionType *fnTy = FunctionType::get(voidptr, {voidptr, voidptr}, false);
 
     Function *wrapperFn = Function::Create(fnTy, Function::ExternalLinkage, "jit_func", mod.get());
     auto args = wrapperFn->args().begin();
-    Value *llvm_code = &*args++;
+    args++; // skip llvm_code
     Value *llvm_vm = &*args;
 
     BasicBlock *entry = BasicBlock::Create(ctx, "entry", wrapperFn);
@@ -101,7 +109,6 @@ if (Linker::linkModules(*mod, std::move(coreMod))) {
         return builder.CreateCall(callee, {arg, llvm_vm});
     };
 
-
     callVM("frame_alloc", 5);
     callVM("push_local", 0);
     callVM("pick", 1);
@@ -112,21 +119,13 @@ if (Linker::linkModules(*mod, std::move(coreMod))) {
     callVM("inject", 5 * sizeof(Word));
     callVM("param_drop", 1);
     Value *retVal = callVM("frame_free", 5);
-
     builder.CreateRet(retVal);
 
-    // Print IR before optimization
-    std::cout << "=== LLVM IR Before Optimization ===\n";
-    mod->print(outs(), nullptr);
-
-    // Run optimization
+    printFunctionIR(wrapperFn, "(before opt)");
     optimizeModule(*mod, ctx);
-
-    std::cout << "\n=== LLVM IR After Optimization ===\n";
-    mod->print(outs(), nullptr);
+    printFunctionIR(wrapperFn, "(after opt)");
 
     cantFail(jit->addIRModule(ThreadSafeModule(std::move(mod), std::make_unique<LLVMContext>())));
-
     auto sym = cantFail(jit->lookup("jit_func"));
     auto compiled_fn = (Code *(*)(Code *, VM *))static_cast<uintptr_t>(sym.getValue());
 
