@@ -95,50 +95,50 @@ fn stack_underflow_panics() {
 
 // /* ───────────────────────── CORE OPS (pick / frame / branch) ───────────────────────── */
 
-// #[test]
-// fn core_operations() {
-//     const CAP: usize = 32;
-//     let mut data  = [MaybeUninit::uninit(); CAP];
-//     let mut params = [MaybeUninit::uninit(); CAP];
+#[test]
+fn core_operations() {
+    const CAP: usize = 32;
+    let mut data  = [MaybeUninit::uninit(); CAP];
+    let mut params = [MaybeUninit::uninit(); CAP];
 
-//     let mut vm = Vm {
-//         data_stack: StackRef::from_slice(&mut data),
-//         param_stack: StackRef::from_slice(&mut params),
-//     };
+    let mut vm = Vm {
+        data_stack: StackRef::from_slice(&mut data),
+        param_stack: StackRef::from_slice(&mut params),
+    };
 
-//     /* ---- pick 0 (duplicate top) ---- */
-//     let dup_code = [Code::basic(pick, 0), Code::basic(ret, 0)];
-//     let dup_word = Code::word(&dup_code);
+    /* ---- pick 0 (duplicate top) ---- */
+    let dup_code = [Code::basic(pick, 0), Code::basic(ret, 0)];
+    let dup_word = Code::word(&dup_code);
 
-//     let canary = 321usize as *mut _;
-//     vm.param_stack.push(canary).unwrap();
-//     unsafe { vm.excute_code(&dup_word as *const Code) };
+    let canary = 321usize as *mut _;
+    vm.param_stack.push(canary).unwrap();
+    unsafe { vm.excute_code(&dup_word as *const Code) };
 
-//     assert_eq!(vm.param_stack.pop().unwrap(), canary);
-//     assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    assert_eq!(vm.param_stack.pop().unwrap(), canary);
 
 
-//     /* ---- branch-if test ---- */
-//     let maybe_dup_code = [
-//         Code::basic(branch, 1),
-//         Code::basic(pick, 0),
-//         Code::basic(ret, 0),
-//     ];
+    /* ---- branch-if test ---- */
+    let maybe_dup_code = [
+        Code::basic(branch, 1),
+        Code::basic(pick, 0),
+        Code::basic(ret, 0),
+    ];
 
-//     let maybe_dup = Code::word(&maybe_dup_code);
+    let maybe_dup = Code::word(&maybe_dup_code);
 
-//     let mut b = UnsafeCell::new(TRUE);
-//     vm.param_stack.push(b.get() as *mut _).unwrap();
-//     unsafe { vm.excute_code(&maybe_dup as *const Code) };
-//     assert_eq!(vm.param_stack.write_index(), 0);
+    let mut b = UnsafeCell::new(PalData{bool:TRUE});
+    vm.param_stack.push(b.get() as *mut _).unwrap();
+    unsafe { vm.excute_code(&maybe_dup as *const Code) };
+    assert_eq!(vm.param_stack.write_index(), 0);
 
-//     vm.param_stack.push(canary).unwrap();
-//     *b.get_mut() = TRUE;
-//     vm.param_stack.push(b.get() as *mut _).unwrap();
-//     unsafe { vm.excute_code(&maybe_dup as *const Code) };
-//     assert_eq!(vm.param_stack.pop().unwrap(), canary);
-//     assert_eq!(vm.param_stack.pop().unwrap(), canary);
-// }
+    vm.param_stack.push(canary).unwrap();
+    *b.get_mut() = PalData{bool:FALSE};
+    vm.param_stack.push(b.get() as *mut _).unwrap();
+    unsafe { vm.excute_code(&maybe_dup as *const Code) };
+    assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    assert_eq!(vm.param_stack.pop().unwrap(), canary);
+}
 
 /* ───────────────────────── INTEGER ARITHMETICS ───────────────────────── */
 
@@ -196,103 +196,104 @@ fn integer_arithmetics() {
 }
 /* ───────────────────────── BOOL & COMPARISONS ───────────────────────── */
 
-// #[test]
-// fn bool_and_comparisons() {
-//     let mut data  = [MaybeUninit::uninit(); 16];
-//     let mut params = [MaybeUninit::uninit(); 16];
+#[test]
+fn bool_and_comparisons() {
+    let mut data  = [MaybeUninit::uninit(); 16];
+    let mut params = [MaybeUninit::uninit(); 16];
 
-//     let mut vm = Vm {
-//         data_stack: StackRef::from_slice(&mut data),
-//         param_stack: StackRef::from_slice(&mut params),
-//     };
+    let mut vm = Vm {
+        data_stack: StackRef::from_slice(&mut data),
+        param_stack: StackRef::from_slice(&mut params),
+    };
 
-//     /* ---- comparisons (EQ / NEQ / < / > / <= / >=) ---- */
-//     let mut res = UnsafeCell::new(FALSE);
-//     let mut x   = UnsafeCell::new(PalData { int: 0 });
-//     let mut y   = UnsafeCell::new(PalData { int: 0 });
+    /* ---- comparisons (EQ / NEQ / < / > / <= / >=) ---- */
+    let mut res = UnsafeCell::new(FALSE);
+    let mut x   = UnsafeCell::new(PalData { int: 0 });
+    let mut y   = UnsafeCell::new(PalData { int: 0 });
 
-//     let mut cmp_code = [
-//         Code::basic(pick, 2),
-//         Code::basic(pick, 2),
-//         Code::basic(pick, 2),
-//         Code::basic(int_eq, 0), // placeholder
-//         Code::basic(param_drop, 1),
-//         Code::basic(ret, 0),
-//     ];
-//     let cmp_word = Code::word(&cmp_code);
+    let mut cmp_code = UnsafeCell::new([
+        Code::basic(pick, 2),
+        Code::basic(pick, 2),
+        Code::basic(pick, 2),
+        Code::basic(int_eq, 0), // placeholder
+        Code::basic(param_drop, 1),
+        Code::basic(ret, 0),
+    ]);
+    let cmp_word = Code::Derived(cmp_code.get() as *const _ );
 
-//     vm.param_stack.push(res.get() as *mut _).unwrap();
-//     vm.param_stack.push(x.get()   as *mut _).unwrap();
-//     vm.param_stack.push(y.get()   as *mut _).unwrap();
+    vm.param_stack.push(res.get() as *mut _).unwrap();
+    vm.param_stack.push(x.get()   as *mut _).unwrap();
+    vm.param_stack.push(y.get()   as *mut _).unwrap();
 
-//     macro_rules! cmp {
-//         ($builtin:path, $l:expr, $r:expr, $ok:expr) => {{
-//             *x.get_mut() = PalData { int: $l };
-//             *y.get_mut() = PalData { int: $r };
-//             cmp_code[3]  = Code::basic($builtin, 0);
-//             unsafe { 
-//                 vm.excute_code(&cmp_word as *const Code);
-//                 assert_eq!(*res.get() == TRUE, $ok);
-//             }
-//         }};
-//     }
+    macro_rules! cmp {
+        ($builtin:path, $l:expr, $r:expr, $ok:expr) => {{
+            *x.get_mut() = PalData { int: $l };
+            *y.get_mut() = PalData { int: $r };
+            (cmp_code.get_mut())[3]  = Code::basic($builtin, 0);
+            unsafe { 
+                vm.excute_code(&cmp_word as *const Code);
+                assert_eq!(*res.get() == TRUE, $ok);
+            }
+        }};
+    }
 
-//     cmp!(int_eq,      5, 5, true);
-//     cmp!(int_neq,     5, 6, true);
-//     cmp!(int_smaller, 2, 3, true);
-//     cmp!(int_bigger,  9, 4, true);
-//     cmp!(int_le,      4, 4, true);
-//     cmp!(int_ge,      7, 2, true);
+    cmp!(int_eq,      5, 5, true);
+    cmp!(int_neq,     5, 6, true);
+    cmp!(int_smaller, 2, 3, true);
+    cmp!(int_bigger,  9, 4, true);
+    cmp!(int_le,      4, 4, true);
+    cmp!(int_ge,      7, 2, true);
 
-//     for _ in 0..3 { vm.param_stack.pop().unwrap(); }
+    for _ in 0..3 { vm.param_stack.pop().unwrap(); }
 
-//     /* ---- logical AND / OR / XOR ---- */
-//     let mut lhs = UnsafeCell::new(PalData { bool: FALSE });
-//     let mut rhs = UnsafeCell::new(PalData { bool: FALSE });
+    /* ---- logical AND / OR / XOR ---- */
+    let mut lhs = UnsafeCell::new(PalData { bool: FALSE });
+    let mut rhs = UnsafeCell::new(PalData { bool: FALSE });
 
-//     let mut bool_code = [
-//         Code::basic(pick, 1),
-//         Code::basic(pick, 1),
-//         Code::basic(bool_and, 0), // placeholder
-//         Code::basic(param_drop, 1),
-//         Code::basic(ret, 0),
-//     ];
-//     let bool_word = Code::word(&bool_code);
+    let mut bool_code = UnsafeCell::new([
+        Code::basic(pick, 1),
+        Code::basic(pick, 1),
+        Code::basic(bool_and, 0), // placeholder
+        Code::basic(param_drop, 1),
+        Code::basic(ret, 0),
+    ]);
+    let bool_word = Code::Derived(bool_code.get() as *const _);
 
-//     vm.param_stack.push(lhs.get() as *mut _).unwrap();
-//     vm.param_stack.push(rhs.get() as *mut _).unwrap();
+    vm.param_stack.push(lhs.get() as *mut _).unwrap();
+    vm.param_stack.push(rhs.get() as *mut _).unwrap();
 
-//     macro_rules! logic {
-//         ($builtin:path, $l:expr, $r:expr, $expect:expr) => {{
-//             *lhs.get_mut() = PalData { bool: $l };
-//             *rhs.get_mut() = PalData { bool: $r };
-//             bool_code[2]   = Code::basic($builtin, 0);
-//             unsafe { 
-//                 vm.excute_code(&bool_word as *const Code);
-//                 assert_eq!((*lhs.get()).bool == TRUE, $expect); 
-//             };
+    macro_rules! logic {
+        ($builtin:path, $l:expr, $r:expr, $expect:expr) => {{
+            *lhs.get_mut() = PalData { bool: $l };
+            *rhs.get_mut() = PalData { bool: $r };
+            (bool_code.get_mut())[2]   = Code::basic($builtin, 0);
+            unsafe { 
+                vm.excute_code(&bool_word as *const Code);
+                assert_eq!((*lhs.get()).bool == TRUE, $expect); 
+            };
             
-//         }};
-//     }
+        }};
+    }
 
-//     logic!(bool_and, TRUE,  TRUE,  true);
-//     logic!(bool_or,  FALSE, TRUE,  true);
-//     logic!(bool_xor, TRUE,  TRUE,  false);
+    logic!(bool_and, TRUE,  TRUE,  true);
+    logic!(bool_or,  FALSE, TRUE,  true);
+    logic!(bool_xor, TRUE,  TRUE,  false);
 
-//     vm.param_stack.pop().unwrap();
-//     vm.param_stack.pop().unwrap();
+    vm.param_stack.pop().unwrap();
+    vm.param_stack.pop().unwrap();
 
-//     /* ---- unary NOT ---- */
-//     let mut v = UnsafeCell::new(TRUE);
-//     let not_word = Code::word(&[
-//         Code::basic(bool_not, 0),
-//         Code::basic(param_drop, 1),
-//         Code::basic(ret, 0),
-//     ]);
+    /* ---- unary NOT ---- */
+    let mut v = UnsafeCell::new(TRUE);
+    let not_code = [
+        Code::basic(bool_not, 0),
+        Code::basic(param_drop, 1),
+        Code::basic(ret, 0),
+    ];
+    let not_word = Code::word(&not_code);
 
-//     vm.param_stack.push(v.get() as *mut _).unwrap();
-//     unsafe { 
-//         vm.excute_code(&not_word as *const Code);
-//         assert_eq!(*v.get_mut() == FALSE, true);
-//     }
-// }
+    vm.param_stack.push(v.get() as *mut _).unwrap();
+    unsafe { 
+        vm.excute_code(&not_word as *const Code);
+        assert_eq!(*v.get_mut() == FALSE, true);
+    }
+}

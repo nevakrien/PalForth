@@ -124,6 +124,12 @@ pub unsafe extern "C-unwind" fn pick< 'vm>(code_ptr: *const Code, vm: &mut Vm<'v
 pub unsafe extern "C-unwind" fn branch< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
     let cond   = pop!(vm) as *const PalBool;
     let offset = param(code_ptr) as isize;
+
+    #[cfg(feature = "trace_vm")]{
+        let ans = *cond;
+        println!("branching based on {cond:?} got {ans}");
+    }
+
     if *cond { code_ptr.wrapping_offset(offset) } else { code_ptr }
 }}
 

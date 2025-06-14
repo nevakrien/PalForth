@@ -1,12 +1,14 @@
 pub mod stack;
 pub mod buildins;
 pub mod vm;
+
+#[cfg(test)]
 pub mod test;
 
 pub type PalInt = i64;
 pub type PalBool = bool;
 pub const TRUE: PalBool = true;
-pub const FALSE: PalBool = true;
+pub const FALSE: PalBool = false;
 
 #[derive(Copy,Clone)]
 pub union PalData{
