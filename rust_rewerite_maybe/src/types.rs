@@ -5,7 +5,7 @@ pub const OUTPUT_FLAG: u8 = 0x8;
 
 pub enum TypeError{
 	AlreadyBorrowed,
-	BadSig(u8),//first 4bits which type of error later 4bits whether sig has that field on
+	BasicSigError(u8),//first 4bits which type of error later 4bits whether sig has that field on
 }
 
 pub type RwT = u8;
@@ -40,7 +40,7 @@ fn check_subset(box_perm: RwT, sig: RwT) -> Result<(),TypeError> {
     }
     
     if ans!=0 {
-    	Err(TypeError::BadSig(ans))
+    	Err(TypeError::BasicSigError(ans))
     }else{
     	Ok(())
     }

@@ -1,3 +1,4 @@
+use crate::vm::VmEasyMemory;
 use std::cell::UnsafeCell;
 use crate::TRUE;
 use crate::FALSE;
@@ -21,12 +22,8 @@ use std::mem::MaybeUninit;
 
 #[test]
 fn round_trip_inject() {
-    let mut data = [const { MaybeUninit::uninit() };32];
-    let mut params = [MaybeUninit::uninit();32];
-    let mut vm = Vm{
-        param_stack:StackRef::from_slice(&mut params),
-        data_stack:StackRef::from_slice(&mut data),
-    };
+    let mut mem = VmEasyMemory::<32>::new();
+    let mut vm = mem.make_vm();
 
     let code = [
 
@@ -75,13 +72,8 @@ fn round_trip_inject() {
 #[test]
 #[cfg(not(feature = "unchecked_underflow"))]   
 fn stack_underflow_panics() {
-    let mut data = [MaybeUninit::uninit(); 8];
-    let mut params = [MaybeUninit::uninit(); 8];
-
-    let mut vm = Vm {
-        data_stack: StackRef::from_slice(&mut data),
-        param_stack: StackRef::from_slice(&mut params),
-    };
+    let mut mem = VmEasyMemory::<8>::new();
+    let mut vm = mem.make_vm();
 
     let prog = [Code::basic(param_drop, 1), Code::basic(ret, 0)];
     let word = Code::word(&prog);
@@ -97,14 +89,8 @@ fn stack_underflow_panics() {
 
 #[test]
 fn core_operations() {
-    const CAP: usize = 32;
-    let mut data  = [MaybeUninit::uninit(); CAP];
-    let mut params = [MaybeUninit::uninit(); CAP];
-
-    let mut vm = Vm {
-        data_stack: StackRef::from_slice(&mut data),
-        param_stack: StackRef::from_slice(&mut params),
-    };
+    let mut mem = VmEasyMemory::<32>::new();
+    let mut vm = mem.make_vm();
 
     /* ---- pick 0 (duplicate top) ---- */
     let dup_code = [Code::basic(pick, 0), Code::basic(ret, 0)];
@@ -144,13 +130,8 @@ fn core_operations() {
 
 #[test]
 fn integer_arithmetics() {
-    let mut data = [MaybeUninit::uninit(); 16];
-    let mut params = [MaybeUninit::uninit(); 16];
-
-    let mut vm = Vm {
-        data_stack: StackRef::from_slice(&mut data),
-        param_stack: StackRef::from_slice(&mut params),
-    };
+    let mut mem = VmEasyMemory::<16>::new();
+    let mut vm = mem.make_vm();
 
     let mut a = UnsafeCell::new(PalData{int:67});
     let mut b = UnsafeCell::new(PalData{int:67});
@@ -198,13 +179,8 @@ fn integer_arithmetics() {
 
 #[test]
 fn bool_and_comparisons() {
-    let mut data  = [MaybeUninit::uninit(); 16];
-    let mut params = [MaybeUninit::uninit(); 16];
-
-    let mut vm = Vm {
-        data_stack: StackRef::from_slice(&mut data),
-        param_stack: StackRef::from_slice(&mut params),
-    };
+    let mut mem = VmEasyMemory::<32>::new();
+    let mut vm = mem.make_vm();
 
     /* ---- comparisons (EQ / NEQ / < / > / <= / >=) ---- */
     let mut res = UnsafeCell::new(FALSE);
