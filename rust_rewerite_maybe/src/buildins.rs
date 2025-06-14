@@ -59,10 +59,10 @@ macro_rules! vm_trace {
 pub unsafe extern "C-unwind" fn inject< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
     let n   = param(code_ptr) as usize;
     let src = pop!(vm) as *const u8;
-    let dst = spot!(vm, 0) as *mut u8;
+    let dst = (*spot!(vm, 0)) as *mut u8;
     
     #[cfg(feature = "trace_vm")]
-    println!("copying {n} bytes from {src:?} to {dst:?}");
+    println!("injecting {n} bytes from {src:?} to {dst:?}");
         
     copy_nonoverlapping(src, dst, n);
     code_ptr
@@ -71,7 +71,11 @@ pub unsafe extern "C-unwind" fn inject< 'vm>(code_ptr: *const Code, vm: &mut Vm<
 pub unsafe extern "C-unwind" fn inject_non_unique< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
     let n   = param(code_ptr) as usize;
     let src = pop!(vm) as *const u8;
-    let dst = spot!(vm, 0) as *mut u8;
+    let dst = (*spot!(vm, 0)) as *mut u8;
+
+    #[cfg(feature = "trace_vm")]
+    println!("copying {n} bytes from {src:?} to {dst:?}");
+
     copy(src, dst, n);
     code_ptr
 }}
@@ -96,6 +100,10 @@ pub unsafe extern "C-unwind" fn param_drop< 'vm>(code_ptr: *const Code, vm: &mut
 pub unsafe extern "C-unwind" fn push_local< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
     let idx = param(code_ptr) as usize;
     let p   = dspot!(vm, idx);
+
+    #[cfg(feature = "trace_vm")]
+    println!("pushing local {p:?}");
+
     push!(vm, p);
     code_ptr
 }}
@@ -106,8 +114,8 @@ pub unsafe extern "C-unwind" fn push_var< 'vm>(code_ptr: *const Code, vm: &mut V
 }}
 
 pub unsafe extern "C-unwind" fn pick< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
-    let p = spot!(vm, param(code_ptr) as usize);
-    push!(vm, *p);
+    let p = *spot!(vm, param(code_ptr) as usize);
+    push!(vm, p);
     code_ptr
 }}
 
@@ -148,7 +156,7 @@ unsafe extern "C-unwind" fn bin_int_op<'vm>(
     op: impl Fn(i64, i64) -> i64,
 ) { unsafe {
     let rhs = pop!(vm)   as *const PalData;
-    let lhs = spot!(vm,0) as *mut  PalData;
+    let lhs = (*spot!(vm,0)) as *mut  PalData;
     let v   = op((*lhs).int, (*rhs).int);
     (*lhs).int = v;
 }}
@@ -181,7 +189,7 @@ unsafe extern "C-unwind" fn cmp_op<'vm>(
 ) { unsafe {
     let rhs = pop!(vm) as *const PalData;
     let lhs = pop!(vm) as *const PalData;
-    let dst = spot!(vm,0) as *mut PalBool;
+    let dst = (*spot!(vm,0)) as *mut PalBool;
     *dst = op((*lhs).int, (*rhs).int);
 }}
 
@@ -206,7 +214,7 @@ macro_rules! bool_logic {
     ($fname:ident, $op:tt) => {
         pub unsafe extern "C-unwind" fn $fname<'vm>(code_ptr:*const Code, vm:&mut Vm<'vm>) -> *const Code { unsafe {
             let src = pop!(vm)  as *const PalBool;
-            let dst = spot!(vm,0) as *mut   PalBool;
+            let dst = (*spot!(vm,0)) as *mut   PalBool;
             *dst = (*src) $op (*dst);
             code_ptr
         }}
@@ -217,7 +225,7 @@ bool_logic!(bool_or,  |);
 bool_logic!(bool_xor, ^);
 
 pub unsafe extern "C-unwind" fn bool_not<'vm>(code_ptr:*const Code, vm:&mut Vm<'vm>) -> *const Code { unsafe {
-    let dst = spot!(vm,0) as *mut PalBool;
+    let dst = (*spot!(vm,0)) as *mut PalBool;
     *dst = !*dst;
     code_ptr
 }}

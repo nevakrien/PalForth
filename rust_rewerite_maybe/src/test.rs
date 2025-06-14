@@ -1,4 +1,3 @@
-use crate::buildins::inject_non_unique;
 use crate::PalData;
 use crate::buildins::frame_alloc;
 use crate::buildins::pick;
@@ -35,7 +34,7 @@ fn round_trip_inject() {
         //inject back out
         Code::basic(pick,1),
         Code::basic(push_local,0),
-        Code::basic(inject_non_unique,5*size_of::<PalData>() as isize),
+        Code::basic(inject,5*size_of::<PalData>() as isize),
         Code::basic(param_drop,1),
 
         //epilogue
@@ -50,11 +49,12 @@ fn round_trip_inject() {
 
     let psrc = &mut src as *mut _;
     let ptgt = &mut tgt as *mut _;
+    let data_stack_head = vm.data_stack.head;
 
     vm.param_stack.push(ptgt).unwrap();
     vm.param_stack.push(psrc).unwrap();
 
-    println!("src {psrc:?} tgt {ptgt:?}",);
+    println!("src {psrc:?} tgt {ptgt:?} data_stack_top {data_stack_head:?}",);
 
     unsafe{
         vm.excute_code(&word as *const Code);

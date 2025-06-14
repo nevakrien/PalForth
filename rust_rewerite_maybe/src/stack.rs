@@ -30,10 +30,10 @@ pub fn make_storage<T, const N: usize>() -> [MaybeUninit<T>; N] {
 ///     └──────── end (low addr)
 /// ```
 pub struct StackRef<'mem, T> {
-    above: *mut T,   // one-past the *highest* live element
-    head:  *mut T,   // next pop / current top (lowest live element)
-    end:   *mut T,   // lowest address in the backing buffer
-    _ph:   PhantomData<&'mem mut [MaybeUninit<T>]>,
+    pub(crate) above: *mut T,   // one-past the *highest* live element
+    pub(crate) head:  *mut T,   // next pop / current top (lowest live element)
+    pub(crate) end:   *mut T,   // lowest address in the backing buffer
+    pub(crate) _ph:   PhantomData<&'mem mut [MaybeUninit<T>]>,
 }
 
 unsafe impl<'m, T: Send> Send for StackRef<'m, T> {}
@@ -485,6 +485,8 @@ fn test_full_usage() {
 
     // Top item (down-growing stack) is 10
     assert_eq!(stack.peek(), Some(&10));
+
+    assert_eq!(stack.spot(2), Some(&mut 30));
 
     // Drop (40, 50)
     stack.drop_inside(3, 2).unwrap();
