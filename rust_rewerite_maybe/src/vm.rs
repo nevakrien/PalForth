@@ -42,11 +42,6 @@ pub struct Vm<'a> {
 }
 
 impl<'vm> Vm<'vm> {
-
-	pub fn run_code(&mut self,code:Code){
-		let code_arr = [code,Code::null()];
-		unsafe{self.excute_code(&code_arr as *const _);}
-	}
 	pub unsafe fn excute_code<'a>(&mut self,code:*const Code) -> *const Code{
 		unsafe{
 			match *code {

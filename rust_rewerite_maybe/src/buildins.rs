@@ -19,7 +19,7 @@ unsafe fn param(code_ptr: *const Code) -> *const Code { unsafe {
 }}
 
 #[inline(always)]
-fn unwrap_under<T>(v: Option<T>) -> T {
+unsafe fn unwrap_under<T>(v: Option<T>) -> T {
     #[cfg(feature = "unchecked_underflow")]
     unsafe { v.unwrap_unchecked() }
     #[cfg(not(feature = "unchecked_underflow"))]
@@ -27,7 +27,7 @@ fn unwrap_under<T>(v: Option<T>) -> T {
 }
 
 #[inline(always)]
-fn unwrap_over<T>(v: Option<T>) -> T {
+unsafe fn unwrap_over<T>(v: Option<T>) -> T {
     #[cfg(feature = "unchecked_overflow")]
     unsafe { v.unwrap_unchecked() }
     #[cfg(not(feature = "unchecked_overflow"))]
@@ -137,9 +137,9 @@ pub unsafe extern "C-unwind" fn jump< 'vm>(code_ptr: *const Code, _vm: &mut Vm<'
     code_ptr.wrapping_offset(param(code_ptr) as isize)
 }}
 
-pub unsafe extern "C-unwind" fn call_dyn< 'vm>(_code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code {
+pub unsafe extern "C-unwind" fn call_dyn< 'vm>(_code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
     pop!(vm) as *const Code
-}
+}}
 
 // no unsafe needed, just null return
 pub extern "C-unwind" fn ret< 'vm>(_: *const Code, _: &mut Vm<'vm>) -> *const Code {
