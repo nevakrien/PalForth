@@ -153,6 +153,8 @@ impl<'mem, T> StackRef<'mem, T> {
         Some(())
     }
 
+    
+
     #[inline]
     pub fn pop_many<'b>(&'b mut self, n: usize) -> Option<&'b mut [T]>
     where
@@ -166,6 +168,32 @@ impl<'mem, T> StackRef<'mem, T> {
             self.head = self.head.add(n);
             Some(slice::from_raw_parts_mut(p, n))
         }
+    }
+
+/*──────────────────── push / pop ───────────────────────*/
+    #[inline]
+    pub fn free(&mut self, len:usize) -> Option<()>{
+        if self.write_index() < len {
+            return None;
+        }
+        unsafe{
+            //force a drop of these elements
+            for x in from_raw_parts_mut(self.head,len){
+                ptr::read(x);
+            }
+
+            self.head = self.head.add(len);
+            Some(())
+        }
+    }
+
+    #[inline]
+    pub unsafe fn alloc(&mut self, len:usize) -> Option<()>{
+        if self.room_left() < len {
+            return None;
+        }
+        self.head = unsafe{self.head.sub(len)};
+        Some(())
     }
 
 /*──────────────────── peek helpers ─────────────────────*/

@@ -1,23 +1,29 @@
-use std::mem::MaybeUninit;
 use std::ptr;
 use crate::PalData;
 use crate::stack::StackRef;
 
-pub type BuildinFunc = for<'vm> fn(*const Code,&mut Vm<'vm>) -> *const Code;
+pub type BuildinFunc =  for<'vm,'a> unsafe extern "C-unwind" fn(*const Code,&mut Vm<'vm>) -> *const Code;
 
 #[derive(Debug,Clone,Copy,PartialEq)]
 pub struct Buildin{
-	f: BuildinFunc,
-	param:*const Code,
+	pub f: BuildinFunc,
+	pub param:*const Code,
 }
 
 #[derive(Debug,Clone,Copy,PartialEq)]
 pub enum Code{
-	Buildin(&'static Buildin),
+	Buildin(Buildin),
 	Derived(*const Code)
 }
 
 impl Code{
+	pub fn basic(f:BuildinFunc,v:isize)->Self{
+		Code::Buildin(Buildin{f,param: v as *const Code})
+	}
+	pub fn word(c:&[Code])->Self{
+		Code::Derived(c as *const [_] as *const _)
+	}
+
 	pub fn is_null(&self)->bool{
 		match self{
 			Code::Buildin(_) => false,
@@ -31,11 +37,12 @@ impl Code{
 }
 
 pub struct Vm<'a> {
-	param_stack:StackRef<'a, *mut PalData<'a>> ,
-	data_stack:StackRef<'a, MaybeUninit<PalData<'a>>>,
+	pub param_stack:StackRef<'a, *mut PalData> ,
+	pub data_stack:StackRef<'a, PalData>,
 }
 
-impl Vm<'_> {
+impl<'vm> Vm<'vm> {
+
 	pub fn run_code(&mut self,code:Code){
 		let code_arr = [code,Code::null()];
 		unsafe{self.excute_code(&code_arr as *const _);}
@@ -56,5 +63,3 @@ impl Vm<'_> {
 		}
 	}
 }
-
-

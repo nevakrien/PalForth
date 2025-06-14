@@ -1,17 +1,23 @@
 pub mod stack;
 pub mod buildins;
 pub mod vm;
+pub mod test;
 
 pub type PalInt = i64;
 pub type PalBool = bool;
+pub const TRUE: PalBool = true;
+pub const FALSE: PalBool = true;
 
-pub union PalData<'a>{
+#[derive(Copy,Clone)]
+pub union PalData{
 	int:PalInt,
 	bool:PalBool,
-	ptr:&'a mut PalData<'a>,
+	ptr:*mut PalData,
 }
 
 
+
+#[derive(Debug)]
 pub enum PalError{
 	StackUnderFlow,
 	StackOverFlow,
