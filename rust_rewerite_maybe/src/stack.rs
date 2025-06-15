@@ -83,6 +83,9 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
     /// **Unchecked**: set depth directly (0 ≤ `idx` ≤ capacity).
+    /// # Safety
+    /// - the index must be in the stacks range
+    /// - this now allows bad reads but non would be excuted automatically
     #[inline]
     pub unsafe fn set_write_index(&mut self, idx: usize) { unsafe {
         self.head = self.above.sub(idx);
@@ -171,8 +174,9 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
 /*──────────────────── push / pop ───────────────────────*/
+    /// flushes elements from the stack 
     #[inline]
-    pub fn free(&mut self, len:usize) -> Option<()>{
+    pub fn flush(&mut self, len:usize) -> Option<()>{
         if self.write_index() < len {
             return None;
         }
@@ -187,6 +191,22 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
+    /// This frees the memory calling no destructor
+    #[inline]
+    pub fn free(&mut self, len:usize) -> Option<()>{
+        if self.write_index() < len {
+            return None;
+        }
+        unsafe{
+            self.head = self.head.add(len);
+            Some(())
+        }
+    }
+
+    /// # Safety
+    /// Calling this puts invalid memory on the stack.
+    /// Using any read operations on it is UB.
+    /// This includes flush; however, free is fine.
     #[inline]
     pub unsafe fn alloc(&mut self, len:usize) -> Option<()>{
         if self.room_left() < len {

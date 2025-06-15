@@ -5,7 +5,7 @@ pub const OUTPUT_FLAG: u8 = 0x8;
 
 pub enum TypeError{
 	AlreadyBorrowed,
-	BasicSigError(u8),//first 4bits which type of error later 4bits whether sig has that field on
+	BasicSigError(RwT),//first 4bits which type of error later 4bits whether sig has that field on
 }
 
 pub type RwT = u8;

@@ -2,7 +2,6 @@ use crate::vm::VmEasyMemory;
 use std::cell::UnsafeCell;
 use crate::TRUE;
 use crate::FALSE;
-use crate::PalBool;
 use crate::buildins::*;
 use std::panic::AssertUnwindSafe;
 use std::panic;
@@ -15,9 +14,6 @@ use crate::buildins::param_drop;
 use crate::buildins::frame_free;
 use crate::buildins::ret;
 use crate::vm::Code;
-use crate::stack::StackRef;
-use crate::vm::Vm;
-use std::mem::MaybeUninit;
 
 
 #[test]
@@ -183,7 +179,7 @@ fn bool_and_comparisons() {
     let mut vm = mem.make_vm();
 
     /* ---- comparisons (EQ / NEQ / < / > / <= / >=) ---- */
-    let mut res = UnsafeCell::new(FALSE);
+    let res = UnsafeCell::new(FALSE);
     let mut x   = UnsafeCell::new(PalData { int: 0 });
     let mut y   = UnsafeCell::new(PalData { int: 0 });
 

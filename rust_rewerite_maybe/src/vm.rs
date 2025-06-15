@@ -77,8 +77,11 @@ pub struct Vm<'a> {
 	// pub struct 
 }
 
-impl<'vm> Vm<'vm> {
-	pub unsafe fn excute_code<'a>(&mut self,code:*const Code) -> *const Code{
+impl Vm<'_> {
+	/// # Safety
+	/// the pointer past must point to valid code
+	/// the stacks must contain the correct inputs
+	pub unsafe fn excute_code(&mut self,code:*const Code) -> *const Code{
 		unsafe{
 			match *code {
 				Code::Buildin(b) => (b.f)(code,self),

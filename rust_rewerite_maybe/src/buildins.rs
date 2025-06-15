@@ -1,3 +1,9 @@
+#![allow(dead_code)]
+#![allow(clippy::missing_safety_doc)]//we have a global safey doc
+
+#![allow(clippy::assign_op_pattern)]//we use macros dont really dont need this
+#![allow(clippy::unnecessary_cast)]
+
 use crate::vm::Buildin;
 use crate::vm::BuildinFunc;
 use crate::vm::Vm;
@@ -56,7 +62,7 @@ macro_rules! vm_trace {
 
 /* ───────────────── memory / frame ops ───────────────── */
 
-pub unsafe extern "C-unwind" fn inject< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn inject(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     let n   = param(code_ptr) as usize;
     let src = pop!(vm) as *const u8;
     let dst = (*spot!(vm, 0)) as *mut u8;
@@ -68,7 +74,7 @@ pub unsafe extern "C-unwind" fn inject< 'vm>(code_ptr: *const Code, vm: &mut Vm<
     code_ptr
 }}
 
-pub unsafe extern "C-unwind" fn inject_non_unique< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn inject_non_unique(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     let n   = param(code_ptr) as usize;
     let src = pop!(vm) as *const u8;
     let dst = (*spot!(vm, 0)) as *mut u8;
@@ -80,24 +86,24 @@ pub unsafe extern "C-unwind" fn inject_non_unique< 'vm>(code_ptr: *const Code, v
     code_ptr
 }}
 
-pub unsafe extern "C-unwind" fn frame_alloc< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn frame_alloc(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     unwrap_over(vm.data_stack.alloc(param(code_ptr) as usize));
     code_ptr
 }}
 
-pub unsafe extern "C-unwind" fn frame_free< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn frame_free(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     unwrap_under(vm.data_stack.free(param(code_ptr) as usize));
     code_ptr
 }}
 
-pub unsafe extern "C-unwind" fn param_drop< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn param_drop(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     unwrap_under(vm.param_stack.free(param(code_ptr) as usize));
     code_ptr
 }}
 
 /* ───────────────── stack access ───────────────── */
 
-pub unsafe extern "C-unwind" fn push_local< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn push_local(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     let idx = param(code_ptr) as usize;
     let p   = dspot!(vm, idx);
 
@@ -108,12 +114,12 @@ pub unsafe extern "C-unwind" fn push_local< 'vm>(code_ptr: *const Code, vm: &mut
     code_ptr
 }}
 
-pub unsafe extern "C-unwind" fn push_var< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn push_var(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     push!(vm, param(code_ptr) as *mut PalData);
     code_ptr
 }}
 
-pub unsafe extern "C-unwind" fn pick< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn pick(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     let p = *spot!(vm, param(code_ptr) as usize);
     push!(vm, p);
     code_ptr
@@ -121,7 +127,7 @@ pub unsafe extern "C-unwind" fn pick< 'vm>(code_ptr: *const Code, vm: &mut Vm<'v
 
 /* ───────────────── control flow ───────────────── */
 
-pub unsafe extern "C-unwind" fn branch< 'vm>(code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn branch(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     let cond   = pop!(vm) as *const PalBool;
     let offset = param(code_ptr) as isize;
 
@@ -133,22 +139,22 @@ pub unsafe extern "C-unwind" fn branch< 'vm>(code_ptr: *const Code, vm: &mut Vm<
     if *cond { code_ptr.wrapping_offset(offset) } else { code_ptr }
 }}
 
-pub unsafe extern "C-unwind" fn jump< 'vm>(code_ptr: *const Code, _vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn jump(code_ptr: *const Code, _vm: &mut Vm) -> *const Code { unsafe {
     code_ptr.wrapping_offset(param(code_ptr) as isize)
 }}
 
-pub unsafe extern "C-unwind" fn call_dyn< 'vm>(_code_ptr: *const Code, vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn call_dyn(_code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
     pop!(vm) as *const Code
 }}
 
 // no unsafe needed, just null return
-pub extern "C-unwind" fn ret< 'vm>(_: *const Code, _: &mut Vm<'vm>) -> *const Code {
+pub extern "C-unwind" fn ret(_: *const Code, _: &mut Vm) -> *const Code {
     core::ptr::null()
 }
 
 /* ───────────────── output ───────────────── */
 
-pub unsafe extern "C-unwind" fn const_print< 'vm>(code_ptr: *const Code, _vm: &mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn const_print(code_ptr: *const Code, _vm: &mut Vm) -> *const Code { unsafe {
     let cstr = CStr::from_ptr(param(code_ptr) as *const i8);
     print!("{}", cstr.to_str().unwrap());
     code_ptr
@@ -157,8 +163,8 @@ pub unsafe extern "C-unwind" fn const_print< 'vm>(code_ptr: *const Code, _vm: &m
 /* ───────────────── arithmetic helpers ───────────────── */
 
 #[inline(always)]
-unsafe extern "C-unwind" fn bin_int_op<'vm>(
-    vm: &mut Vm<'vm>,
+unsafe extern "C-unwind" fn bin_int_op(
+    vm: &mut Vm,
     op: impl Fn(i64, i64) -> i64,
 ) { unsafe {
     let rhs = pop!(vm)   as *const PalData;
@@ -169,7 +175,7 @@ unsafe extern "C-unwind" fn bin_int_op<'vm>(
 
 macro_rules! arith_fn {
     ($fname:ident, $op:tt) => {
-        pub unsafe extern "C-unwind" fn $fname<'vm>(code_ptr:*const Code, vm:&mut Vm<'vm>) -> *const Code { unsafe {
+        pub unsafe extern "C-unwind" fn $fname(code_ptr:*const Code, vm:&mut Vm) -> *const Code { unsafe {
             bin_int_op(vm, |a,b| a $op b);
             code_ptr
         }}
@@ -189,8 +195,8 @@ arith_fn!(int_xor, ^);
 /* ───────────────── comparisons ───────────────── */
 
 #[inline(always)]
-unsafe extern "C-unwind" fn cmp_op<'vm>(
-    vm: &mut Vm<'vm>,
+unsafe extern "C-unwind" fn cmp_op(
+    vm: &mut Vm,
     op: impl Fn(i64, i64) -> bool,
 ) { unsafe {
     let rhs = pop!(vm) as *const PalData;
@@ -201,7 +207,7 @@ unsafe extern "C-unwind" fn cmp_op<'vm>(
 
 macro_rules! cmp_fn {
     ($fname:ident, $op:tt) => {
-        pub unsafe extern "C-unwind" fn $fname<'vm>(code_ptr:*const Code, vm:&mut Vm<'vm>) -> *const Code { unsafe {
+        pub unsafe extern "C-unwind" fn $fname(code_ptr:*const Code, vm:&mut Vm) -> *const Code { unsafe {
             cmp_op(vm, |a,b| a $op b);
             code_ptr
         }}
@@ -218,7 +224,7 @@ cmp_fn!(int_ge, >=);
 
 macro_rules! bool_logic {
     ($fname:ident, $op:tt) => {
-        pub unsafe extern "C-unwind" fn $fname<'vm>(code_ptr:*const Code, vm:&mut Vm<'vm>) -> *const Code { unsafe {
+        pub unsafe extern "C-unwind" fn $fname(code_ptr:*const Code, vm:&mut Vm) -> *const Code { unsafe {
             let src = pop!(vm)  as *const PalBool;
             let dst = (*spot!(vm,0)) as *mut   PalBool;
             *dst = (*src) $op (*dst);
@@ -230,7 +236,7 @@ bool_logic!(bool_and, &);
 bool_logic!(bool_or,  |);
 bool_logic!(bool_xor, ^);
 
-pub unsafe extern "C-unwind" fn bool_not<'vm>(code_ptr:*const Code, vm:&mut Vm<'vm>) -> *const Code { unsafe {
+pub unsafe extern "C-unwind" fn bool_not(code_ptr:*const Code, vm:&mut Vm) -> *const Code { unsafe {
     let dst = (*spot!(vm,0)) as *mut PalBool;
     *dst = !*dst;
     code_ptr
