@@ -1,14 +1,52 @@
+use std::ptr;
+use std::sync::atomic::Ordering;
+use std::sync::atomic::AtomicPtr;
 use crate::stack::make_storage;
 use std::mem::MaybeUninit;
 use crate::PalData;
 use crate::stack::StackRef;
+use core::mem::transmute;
 
-pub type BuildinFunc =  for<'vm,'a> unsafe extern "C-unwind" fn(*const Code,&mut Vm<'vm>) -> *const Code;
+pub type BuildinFunc =  for<'vm> unsafe extern "C-unwind" fn(*const Code,&mut Vm<'vm>) -> *const Code;
 
-#[repr(C)]
-#[derive(Debug,Clone,Copy,PartialEq)]
+
+#[derive(Debug)]
+pub struct BuildinPtr{
+	inner:AtomicPtr<()>
+}
+impl BuildinPtr{
+	pub fn new(f:BuildinFunc)->Self{
+		Self{
+			inner:AtomicPtr::new(unsafe{transmute(f)})
+		}
+	}
+	pub fn empty() -> Self{
+		Self{
+			inner:AtomicPtr::new(ptr::null_mut())
+		}
+	}
+
+	#[inline(always)]
+	pub unsafe fn call(&self,code:*const Code,vm:&mut Vm)-> *const Code{unsafe{
+		let f = self.load(Ordering::Relaxed).unwrap_unchecked();
+		f(code, vm)
+	}}
+
+	#[inline(always)]
+	pub fn load(&self,order:Ordering)-> Option<BuildinFunc> {unsafe{
+		transmute(self.inner.load(order))
+	}}
+
+	// #[inline(always)]
+	// pub unsafe fn store(&self,f:BuildinFunc,order:Ordering,) {unsafe{
+	// 	let x :*mut () = core::mem::transmute(self.inner.load(order))
+	// }}
+}
+
+#[repr(C,align(8))]
+#[derive(Debug)]
 pub struct Code{
-	pub f: Option<BuildinFunc>,
+	pub f: BuildinPtr,
 	pub param:*const Code,
 }
 
@@ -22,18 +60,18 @@ pub struct Code{
 
 impl Code{
 	pub fn basic(f:BuildinFunc,v:isize)->Self{
-		Code{f:Some(f),param: v as *const Code}
+		Code{f:BuildinPtr::new(f),param: v as *const Code}
 
 	}
 	pub fn word(c:&[Code])->Self{
-		Code{f:None,param:c as *const [_] as *const _}
+		Code{f:BuildinPtr::empty(),param:c as *const [_] as *const _}
 	}
 	pub fn word_raw(param:*const Code)->Self{
-		Code{f:None,param}
+		Code{f:BuildinPtr::empty(),param}
 	}
 
 	pub fn is_null(&self)->bool{
-		self.f.is_none() && self.param.is_null()
+		self.f.load(Ordering::Relaxed).is_none() && self.param.is_null()
 	}
 }
 
@@ -82,7 +120,7 @@ impl Vm<'_> {
 	/// the stacks must contain the correct inputs
 	pub unsafe fn excute_code(&mut self,code:*const Code) -> *const Code{
 		unsafe{
-			match (*code).f {
+			match (*code).f.load(Ordering::Relaxed) {
 				Some(x) => (x)(code,self),
 				None => {
 					let mut code = (*code).param;
