@@ -4,8 +4,6 @@
 #![allow(clippy::assign_op_pattern)]//we use macros dont really dont need this
 #![allow(clippy::unnecessary_cast)]
 
-use crate::vm::Buildin;
-use crate::vm::BuildinFunc;
 use crate::vm::Vm;
 use crate::vm::Code;
 use std::{
@@ -18,10 +16,7 @@ use crate::{PalData, PalBool};
 
 #[inline(always)]
 unsafe fn param(code_ptr: *const Code) -> *const Code { unsafe {
-    match &*code_ptr {
-        Code::Buildin(b) => b.param,
-        _ => core::hint::unreachable_unchecked(),
-    }
+    (*code_ptr).param
 }}
 
 #[inline(always)]
@@ -242,8 +237,3 @@ pub unsafe extern "C-unwind" fn bool_not(code_ptr:*const Code, vm:&mut Vm) -> *c
     code_ptr
 }}
 
-/* ───────────────── helpers to build constant Buildin objects ───────────────── */
-
-pub const fn mk_builtin(f: BuildinFunc, param: usize) -> Buildin {
-    Buildin { f, param: param as *const Code }
-}

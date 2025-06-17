@@ -139,7 +139,7 @@ fn integer_arithmetics() {
         Code::basic(param_drop, 1),
         Code::basic(ret, 0),
     ]);
-    let arith_word = Code::Derived(arith_code.get() as *const _);
+    let arith_word = Code::word_raw(arith_code.get() as *const _);
 
     vm.param_stack.push(a.get()).unwrap();
     vm.param_stack.push(b.get()).unwrap();
@@ -191,7 +191,7 @@ fn bool_and_comparisons() {
         Code::basic(param_drop, 1),
         Code::basic(ret, 0),
     ]);
-    let cmp_word = Code::Derived(cmp_code.get() as *const _ );
+    let cmp_word = Code::word_raw(cmp_code.get() as *const _);
 
     vm.param_stack.push(res.get() as *mut _).unwrap();
     vm.param_stack.push(x.get()   as *mut _).unwrap();
@@ -229,7 +229,7 @@ fn bool_and_comparisons() {
         Code::basic(param_drop, 1),
         Code::basic(ret, 0),
     ]);
-    let bool_word = Code::Derived(bool_code.get() as *const _);
+    let bool_word = Code::word_raw(bool_code.get() as *const _);
 
     vm.param_stack.push(lhs.get() as *mut _).unwrap();
     vm.param_stack.push(rhs.get() as *mut _).unwrap();
