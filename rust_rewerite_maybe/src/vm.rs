@@ -18,9 +18,12 @@ pub struct Code{
 // 	Derived(*const Code)
 // }
 
+
+
 impl Code{
 	pub fn basic(f:BuildinFunc,v:isize)->Self{
 		Code{f:Some(f),param: v as *const Code}
+
 	}
 	pub fn word(c:&[Code])->Self{
 		Code{f:None,param:c as *const [_] as *const _}
@@ -88,7 +91,8 @@ impl Vm<'_> {
 						if code.is_null(){
 							return code;
 						}
-						code = code.add(1)
+						//anoyingly some jumps may be 1 below the allocation so we need this
+						code = code.wrapping_add(1)
 					}
 				}
 			}

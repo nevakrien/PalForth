@@ -15,7 +15,6 @@ use crate::buildins::frame_free;
 use crate::buildins::ret;
 use crate::vm::Code;
 
-
 #[test]
 fn round_trip_inject() {
     let mut mem = VmEasyMemory::<32>::new();
