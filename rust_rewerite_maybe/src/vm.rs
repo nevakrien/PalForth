@@ -15,11 +15,14 @@ pub struct BuildinPtr{
 	inner:AtomicPtr<()>
 }
 impl BuildinPtr{
+	#[inline]
 	pub fn new(f:BuildinFunc)->Self{
 		Self{
 			inner:AtomicPtr::new(unsafe{transmute(f)})
 		}
 	}
+
+	#[inline]
 	pub fn empty() -> Self{
 		Self{
 			inner:AtomicPtr::new(ptr::null_mut())
@@ -59,17 +62,24 @@ pub struct Code{
 
 
 impl Code{
+
+	#[inline]
 	pub fn basic(f:BuildinFunc,v:isize)->Self{
 		Code{f:BuildinPtr::new(f),param: v as *const Code}
 
 	}
+
+	#[inline]
 	pub fn word(c:&[Code])->Self{
 		Code{f:BuildinPtr::empty(),param:c as *const [_] as *const _}
 	}
+
+	#[inline]
 	pub fn word_raw(param:*const Code)->Self{
 		Code{f:BuildinPtr::empty(),param}
 	}
 
+	#[inline]
 	pub fn is_null(&self)->bool{
 		self.f.load(Ordering::Relaxed).is_none() && self.param.is_null()
 	}
