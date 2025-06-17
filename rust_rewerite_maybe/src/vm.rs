@@ -18,7 +18,7 @@ impl BuildinPtr{
 	#[inline]
 	pub fn new(f:BuildinFunc)->Self{
 		Self{
-			inner:AtomicPtr::new(unsafe{transmute(f)})
+			inner:AtomicPtr::new(f as *mut ())
 		}
 	}
 
@@ -29,6 +29,10 @@ impl BuildinPtr{
 		}
 	}
 
+	/// # Safety
+	/// this calls the underlying function so all its conditons apply
+	/// more over the memory housing the code must be in cache
+	/// this means the function must have been written with Relese atomic ordering
 	#[inline(always)]
 	pub unsafe fn call(&self,code:*const Code,vm:&mut Vm)-> *const Code{unsafe{
 		let f = self.load(Ordering::Relaxed).unwrap_unchecked();
@@ -49,8 +53,10 @@ impl BuildinPtr{
 #[repr(C,align(8))]
 #[derive(Debug)]
 pub struct Code{
+	//so both of these are atomic but dont touch them togehter
+	//in general only one of this is acessed atomic at any moment
 	pub f: BuildinPtr,
-	pub param:*const Code,
+	pub param:AtomicPtr<Code>,//this is const
 }
 
 // #[derive(Debug,Clone,Copy,PartialEq)]
@@ -65,23 +71,23 @@ impl Code{
 
 	#[inline]
 	pub fn basic(f:BuildinFunc,v:isize)->Self{
-		Code{f:BuildinPtr::new(f),param: v as *const Code}
+		Code{f:BuildinPtr::new(f),param: AtomicPtr::new(v as *mut Code)}
 
 	}
 
 	#[inline]
 	pub fn word(c:&[Code])->Self{
-		Code{f:BuildinPtr::empty(),param:c as *const [_] as *const _}
+		Code{f:BuildinPtr::empty(),param:AtomicPtr::new(c as *const [_] as *const _ as *mut _)}
 	}
 
 	#[inline]
 	pub fn word_raw(param:*const Code)->Self{
-		Code{f:BuildinPtr::empty(),param}
+		Code{f:BuildinPtr::empty(),param:AtomicPtr::new(param as *mut _)}
 	}
 
 	#[inline]
 	pub fn is_null(&self)->bool{
-		self.f.load(Ordering::Relaxed).is_none() && self.param.is_null()
+		self.f.load(Ordering::Relaxed).is_none() && self.param.load(Ordering::Relaxed).is_null()
 	}
 }
 
@@ -133,7 +139,7 @@ impl Vm<'_> {
 			match (*code).f.load(Ordering::Relaxed) {
 				Some(x) => (x)(code,self),
 				None => {
-					let mut code = (*code).param;
+					let mut code = (*code).param.load(Ordering::Relaxed) as *const _;
 					loop {
 						code = self.excute_code(code);
 						if code.is_null(){

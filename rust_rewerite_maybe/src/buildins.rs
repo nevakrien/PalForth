@@ -4,6 +4,7 @@
 #![allow(clippy::assign_op_pattern)]//we use macros dont really dont need this
 #![allow(clippy::unnecessary_cast)]
 
+use std::sync::atomic::Ordering;
 use crate::vm::Vm;
 use crate::vm::Code;
 use std::{
@@ -16,7 +17,7 @@ use crate::{PalData, PalBool};
 
 #[inline(always)]
 unsafe fn param(code_ptr: *const Code) -> *const Code { unsafe {
-    (*code_ptr).param
+    (*code_ptr).param.load(Ordering::Relaxed) as *const _
 }}
 
 #[inline(always)]
@@ -133,6 +134,18 @@ pub unsafe extern "C-unwind" fn branch(code_ptr: *const Code, vm: &mut Vm) -> *c
 
     if *cond { code_ptr.wrapping_offset(offset) } else { code_ptr }
 }}
+
+//this is for platforms without a JIT
+//if there is a JIT allways prefer JITing a simple return_x and writing it to the f side
+pub unsafe extern "C-unwind" fn maybe_backpatch(code_ptr: *const Code, _vm: &mut Vm) -> *const Code { unsafe {
+    let p = param(code_ptr);
+    if p.is_null(){
+        code_ptr
+    }else{
+        p
+    }
+}}
+
 
 pub unsafe extern "C-unwind" fn jump(code_ptr: *const Code, _vm: &mut Vm) -> *const Code { unsafe {
     code_ptr.wrapping_offset(param(code_ptr) as isize)
