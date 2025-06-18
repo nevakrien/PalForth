@@ -160,7 +160,9 @@ impl Vm<'_> {
 	/// # Safety
 	/// the pointer past must point to valid code
 	/// the stacks must contain the correct inputs
-	pub unsafe fn excute_code(&mut self,mut code:*const Code){
+	pub unsafe fn excute_code(&mut self,mut code:*const Code){		
+		//compiler can load the return stack
+
 		loop{
 			//first get a primitive and run it
 			unsafe{
@@ -172,21 +174,25 @@ impl Vm<'_> {
 				}
 
 				code=primitive.unwrap_unchecked()(code,self)
+
+				//compiler must unload the return stack since we just called &mut Vm
+				//it will now (likely) load it again since no calls with &mut Vm are made after
 			};
 
+
 			//is there more code to run?
+
 			if code.is_null(){
-				match self.return_stack.pop(){
-					Some(resume) => {
-						//if this is the outer frame then code+1 is junk
-						//we need to return now
-						if self.return_stack.is_empty(){
-							return
-						}
-						code=resume;
-					},
-					None => return,
+				//if this is the outer frame then code+1 is junk
+				//and we need to return now
+				//also if the return stack is empty
+				if self.return_stack.len()<=1{
+					let _ = self.return_stack.pop();
+					return
 				}
+
+				//this bit was rewritten as LLVM made sub par assembly
+				code = unsafe{self.return_stack.pop().unwrap_unchecked()};
 			}
 			code=code.wrapping_add(1);
 		}

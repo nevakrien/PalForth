@@ -30,6 +30,7 @@ pub fn make_storage<T, const N: usize>() -> [MaybeUninit<T>; N] {
 ///     └──────── end (low addr)
 /// ```
 pub struct StackRef<'mem, T> {
+    //the fact rust is missing const makes this make less effishent code than i would like...
     pub(crate) above: *mut T,   // one-past the *highest* live element
     pub(crate) head:  *mut T,   // next pop / current top (lowest live element)
     pub(crate) end:   *mut T,   // lowest address in the backing buffer
