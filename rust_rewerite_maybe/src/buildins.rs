@@ -21,7 +21,7 @@ unsafe fn param(code_ptr: *const Code) -> *const Code { unsafe {
 }}
 
 #[inline(always)]
-unsafe fn unwrap_under<T>(v: Option<T>) -> T {
+pub unsafe fn unwrap_under<T>(v: Option<T>) -> T {
     #[cfg(feature = "unchecked_underflow")]
     unsafe { v.unwrap_unchecked() }
     #[cfg(not(feature = "unchecked_underflow"))]
@@ -29,7 +29,7 @@ unsafe fn unwrap_under<T>(v: Option<T>) -> T {
 }
 
 #[inline(always)]
-unsafe fn unwrap_over<T>(v: Option<T>) -> T {
+pub unsafe fn unwrap_over<T>(v: Option<T>) -> T {
     #[cfg(feature = "unchecked_overflow")]
     unsafe { v.unwrap_unchecked() }
     #[cfg(not(feature = "unchecked_overflow"))]

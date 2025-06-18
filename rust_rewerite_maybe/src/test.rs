@@ -268,3 +268,36 @@ fn bool_and_comparisons() {
         assert_eq!(*v.get_mut() == FALSE, true);
     }
 }
+
+#[test]
+fn nested_word_dup() {
+    use crate::buildins::*;
+
+    let mut mem = VmEasyMemory::<16>::new();
+    let mut vm  = mem.make_vm();
+
+    /* ---- inner word: DUP (pick 0) ---- */
+    let dup_code = [
+        Code::basic(pick, 0),
+        Code::basic(ret, 0),
+    ];
+    let dup_word = Code::word(&dup_code);           // f == None → user-defined
+
+    /* ---- outer word: call the inner DUP ---- */
+    let outer_code = [
+        dup_word,                                    // nested call
+        Code::basic(ret, 0),
+    ];
+    let outer_word = Code::word(&outer_code);
+
+    /* ---- run it ---- */
+    let canary = 321usize as *mut _;
+    vm.param_stack.push(canary).unwrap();
+
+    unsafe { vm.excute_code(&outer_word as *const Code) };
+
+    // Stack should now contain two identical pointers
+    assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    assert_eq!(vm.param_stack.write_index(), 0);
+}

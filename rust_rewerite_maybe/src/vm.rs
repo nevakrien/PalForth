@@ -1,3 +1,4 @@
+use crate::buildins::unwrap_over;
 use std::ptr;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicPtr;
@@ -94,6 +95,7 @@ impl Code{
 pub struct VmEasyMemory<const STACK_SIZE : usize> {
 	param:[MaybeUninit<*mut PalData>;STACK_SIZE] ,
 	data:[MaybeUninit<PalData>;STACK_SIZE],
+	rs:[MaybeUninit<*const Code>;STACK_SIZE],
 	types:[MaybeUninit<PalData>;STACK_SIZE],
 }
 
@@ -103,6 +105,7 @@ fn default() -> Self {
 	Self{
 		param:make_storage(),
 		data:make_storage(),
+		rs:make_storage(),
 		types:make_storage(),
 	}
 }
@@ -118,6 +121,7 @@ impl<const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE>{
 		Vm{
 			param_stack:StackRef::from_slice(&mut self.param),
 			data_stack:StackRef::from_slice(&mut self.data),
+			return_stack:StackRef::from_slice(&mut self.rs),
 			type_stack:StackRef::from_slice(&mut self.types),
 		}
 	}
@@ -126,30 +130,117 @@ impl<const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE>{
 pub struct Vm<'a> {
 	pub param_stack:StackRef<'a, *mut PalData> ,
 	pub data_stack:StackRef<'a, PalData>,
+	pub return_stack:StackRef<'a, *const Code>,
+
 	pub type_stack:StackRef<'a, PalData>,
 	// pub struct 
 }
 
 impl Vm<'_> {
+
+	// pub unsafe fn excute_code(&mut self,code:*const Code) -> *const Code{
+	// 	unsafe{
+	// 		match (*code).f.load(Ordering::Relaxed) {
+	// 			Some(x) => (x)(code,self),
+	// 			None => {
+	// 				let mut code = (*code).param.load(Ordering::Relaxed) as *const _;
+	// 				loop {
+	// 					code = self.excute_code(code);
+	// 					if code.is_null(){
+	// 						return code;
+	// 					}
+	// 					//anoyingly some jumps may be 1 below the allocation so we need this
+	// 					code = code.wrapping_add(1)
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+
 	/// # Safety
 	/// the pointer past must point to valid code
 	/// the stacks must contain the correct inputs
-	pub unsafe fn excute_code(&mut self,code:*const Code) -> *const Code{
-		unsafe{
-			match (*code).f.load(Ordering::Relaxed) {
-				Some(x) => (x)(code,self),
-				None => {
-					let mut code = (*code).param.load(Ordering::Relaxed) as *const _;
-					loop {
-						code = self.excute_code(code);
-						if code.is_null(){
-							return code;
+	pub unsafe fn excute_code(&mut self,mut code:*const Code){
+		loop{
+			//first get a primitive and run it
+			unsafe{
+				let mut primitive = (*code).f.load(Ordering::Relaxed);
+				while primitive.is_none() {
+					unwrap_over(self.return_stack.push(code).ok());
+					code = (*code).param.load(Ordering::Relaxed) as *const _;
+					primitive = (*code).f.load(Ordering::Relaxed);
+				}
+
+				code=primitive.unwrap_unchecked()(code,self)
+			};
+
+			//is there more code to run?
+			if code.is_null(){
+				match self.return_stack.pop(){
+					Some(resume) => {
+						//if this is the outer frame then code+1 is junk
+						//we need to return now
+						if self.return_stack.is_empty(){
+							return
 						}
-						//anoyingly some jumps may be 1 below the allocation so we need this
-						code = code.wrapping_add(1)
-					}
+						code=resume;
+					},
+					None => return,
 				}
 			}
+			code=code.wrapping_add(1);
 		}
 	}
+
+	// pub unsafe fn excute_code(&mut self, mut ip: *const Code) { unsafe {
+    //     use core::sync::atomic::Ordering::Relaxed;
+
+    //     loop {
+    //         /* ───── 1.  finished executing a word? ───── */
+    //         if ip.is_null() {
+    //             match self.return_stack.pop() {
+    //                 // Resume the caller that is waiting on the top frame
+    //                 Some(resume) => {
+    //                     // If there is no upper frame then our n+1 is garbage
+    //                     // this was the last frame we are now poping so we must be existing
+    //                     if self.return_stack.is_empty() {
+    //                         return;
+    //                     }
+    //                     ip = resume;
+    //                     continue;
+    //                 }
+    //                 // No caller → top-level NULL.  We are done.
+    //                 None => return,
+    //             }
+    //         }
+
+    //         /* ───── 2.  dispatch current cell ───── */
+    //         match (*ip).f.load(Relaxed) {
+    //             /* 2a. Primitive / built-in */
+    //             Some(prim) => {
+    //                 // Execute the primitive.
+    //                 let mut next = (prim)(ip, self);
+
+    //                 // The old outer loop always advanced one cell *after*
+    //                 // returning from a child call – do the same.
+    //                 if !next.is_null() {
+    //                     next = next.wrapping_add(1);
+    //                 }
+    //                 ip = next;
+    //             }
+
+    //             /* 2b. Colon definition – jump into it */
+    //             None => {
+    //                 // Push the return address (cell after this word).
+    //                 self.return_stack
+    //                     .push(ip.wrapping_add(1))
+    //                     .expect("return stack overflow");
+
+    //                 // Enter the definition’s first cell.
+    //                 ip = (*ip).param.load(Relaxed);
+    //             }
+    //         }
+    //     }
+    // }}
+
 }

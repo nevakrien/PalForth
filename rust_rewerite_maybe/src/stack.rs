@@ -91,6 +91,16 @@ impl<'mem, T> StackRef<'mem, T> {
         self.head = self.above.sub(idx);
     }}
 
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.write_index()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) ->bool{
+        self.len()==0
+    }
+
 /*──────────────────── push / pop ───────────────────────*/
     #[inline]
     pub fn push(&mut self, v: T) -> Result<(), T> {
