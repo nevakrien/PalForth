@@ -2,11 +2,11 @@
 #![allow(clippy::needless_lifetimes)]
 
 
-use std::slice::from_raw_parts_mut;
-use std::marker::PhantomData;
-use std::mem::MaybeUninit;
-use std::ptr;
-use std::slice;
+use core::slice::from_raw_parts_mut;
+use core::marker::PhantomData;
+use core::mem::MaybeUninit;
+use core::ptr;
+use core::slice;
 
 
 
@@ -600,7 +600,7 @@ fn test_drop_inside_skip_zero_should_remove_top_items() {
 
 #[test]
 fn test_zero_capacity_stack() {
-    use std::mem::MaybeUninit;
+    use core::mem::MaybeUninit;
 
     let mut storage: [MaybeUninit<u32>; 0] = [];
     let mut stack = StackRef::from_slice(&mut storage);

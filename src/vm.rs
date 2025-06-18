@@ -1,9 +1,9 @@
 use crate::buildins::unwrap_over;
-use std::ptr;
-use std::sync::atomic::Ordering;
-use std::sync::atomic::AtomicPtr;
+use core::ptr;
+use core::sync::atomic::Ordering;
+use core::sync::atomic::AtomicPtr;
 use crate::stack::make_storage;
-use std::mem::MaybeUninit;
+use core::mem::MaybeUninit;
 use crate::PalData;
 use crate::stack::StackRef;
 use core::mem::transmute;

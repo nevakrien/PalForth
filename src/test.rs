@@ -1,10 +1,9 @@
 use crate::vm::VmEasyMemory;
-use std::cell::UnsafeCell;
+use core::cell::UnsafeCell;
 use crate::TRUE;
 use crate::FALSE;
 use crate::buildins::*;
-use std::panic::AssertUnwindSafe;
-use std::panic;
+use core::panic::AssertUnwindSafe;
 use crate::PalData;
 use crate::buildins::frame_alloc;
 use crate::buildins::pick;
@@ -14,6 +13,9 @@ use crate::buildins::param_drop;
 use crate::buildins::frame_free;
 use crate::buildins::ret;
 use crate::vm::Code;
+
+
+
 
 #[test]
 fn round_trip_inject() {
@@ -53,7 +55,8 @@ fn round_trip_inject() {
     vm.param_stack.push(ptgt).unwrap();
     vm.param_stack.push(psrc).unwrap();
 
-    println!("src {psrc:?} tgt {ptgt:?} data_stack_top {data_stack_head:?}",);
+    extern crate std;
+    std::println!("src {psrc:?} tgt {ptgt:?} data_stack_top {data_stack_head:?}",);
 
     unsafe{
         vm.excute_code(&word as *const Code);
@@ -73,7 +76,8 @@ fn stack_underflow_panics() {
     let prog = [Code::basic(param_drop, 1), Code::basic(ret, 0)];
     let word = Code::word(&prog);
 
-    let res = panic::catch_unwind(AssertUnwindSafe(|| unsafe {
+    extern crate std;
+    let res = std::panic::catch_unwind(AssertUnwindSafe(|| unsafe {
         vm.excute_code(&word as *const Code); // empty stack → should panic
     }));
 

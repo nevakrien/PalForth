@@ -1,3 +1,6 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+
 pub mod stack;
 pub mod buildins;
 pub mod vm;

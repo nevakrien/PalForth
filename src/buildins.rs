@@ -4,14 +4,14 @@
 #![allow(clippy::assign_op_pattern)]//we use macros dont really dont need this
 #![allow(clippy::unnecessary_cast)]
 
-use std::sync::atomic::Ordering;
+use core::sync::atomic::Ordering;
 use crate::vm::Vm;
 use crate::vm::Code;
-use std::{
-    ffi::CStr,
-    ptr::{copy, copy_nonoverlapping},
-};
+use core::ptr::{copy, copy_nonoverlapping};
 use crate::{PalData, PalBool};
+
+
+
 
 /*════════════════ helpers ════════════════*/
 
@@ -162,7 +162,11 @@ pub extern "C-unwind" fn ret(_: *const Code, _: &mut Vm) -> *const Code {
 
 /* ───────────────── output ───────────────── */
 
+#[cfg(feature = "std")]
 pub unsafe extern "C-unwind" fn const_print(code_ptr: *const Code, _vm: &mut Vm) -> *const Code { unsafe {
+    use std::ffi::CStr;
+    
+
     let cstr = CStr::from_ptr(param(code_ptr) as *const i8);
     print!("{}", cstr.to_str().unwrap());
     code_ptr

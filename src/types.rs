@@ -1,11 +1,57 @@
+use core::fmt;
+
 pub const READ_FLAG: u8   = 0x1;
 pub const WRITE_FLAG: u8  = 0x2;
 pub const UNIQUE_FLAG: u8 = 0x4;
 pub const OUTPUT_FLAG: u8 = 0x8;
 
 pub enum TypeError{
+    NeedsUnique,
 	AlreadyBorrowed,
 	BasicSigError(RwT),//first 4bits which type of error later 4bits whether sig has that field on
+}
+impl fmt::Display for TypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeError::NeedsUnique => write!(
+                f,
+                "Cannot borrow mutably: value is already borrowed (requires unique access)"
+            ),
+            TypeError::AlreadyBorrowed => write!(
+                f,
+                "Cannot borrow mutably: value is currently borrowed as unique"
+            ),
+            TypeError::BasicSigError(flags) => {
+                let have = flags & 0x0F;
+                let want = (flags & 0xF0) >> 4;
+
+                writeln!(f, "Signature mismatch:")?;
+
+                if (want & READ_FLAG != 0) && (have & READ_FLAG == 0) {
+                    writeln!(f, "  - expected read access, but it's missing")?;
+                }
+                if (want & WRITE_FLAG != 0) && (have & WRITE_FLAG == 0) {
+                    writeln!(f, "  - expected write access, but it's missing")?;
+                }
+                if (want & UNIQUE_FLAG != 0) && (have & UNIQUE_FLAG == 0) {
+                    writeln!(f, "  - expected unique access, but it's missing")?;
+                }
+                if (want & OUTPUT_FLAG != 0) != (have & OUTPUT_FLAG != 0) {
+                    let expected = if want & OUTPUT_FLAG != 0 { "output" } else { "input" };
+                    let actual   = if have & OUTPUT_FLAG != 0 { "output" } else { "input" };
+                    writeln!(f, "  - expected {}, but got {}", expected, actual)?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+impl fmt::Debug for TypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
 }
 
 pub type RwT = u8;
@@ -53,7 +99,7 @@ pub fn use_box_as(box_var: &mut BoxVar, sig: RwT) -> Result<(),TypeError> {
         return Err(TypeError::AlreadyBorrowed);
     }
     if (sig & UNIQUE_FLAG != 0) && box_var.num_borrowed != 0 {
-        return Err(TypeError::AlreadyBorrowed);
+        return Err(TypeError::NeedsUnique);
     }
 
     if sig & UNIQUE_FLAG != 0 {
