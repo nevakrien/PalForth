@@ -162,7 +162,6 @@ impl Vm<'_> {
 	/// the stacks must contain the correct inputs
 	pub unsafe fn excute_code(&mut self,mut code:*const Code){		
 		//compiler can load the return stack
-
 		loop{
 			//first get a primitive and run it
 			unsafe{
@@ -177,11 +176,13 @@ impl Vm<'_> {
 
 				//compiler must unload the return stack since we just called &mut Vm
 				//it will now (likely) load it again since no calls with &mut Vm are made after
+				//if we were to commit to optimizing this loop the trick would be to use head pointer directly
+				//however this means a VM cant switch its stack which means multi tasking cant works from within
+				//its better to allow out right switching the return stack as an internal
 			};
 
 
 			//is there more code to run?
-
 			if code.is_null(){
 				//if this is the outer frame then code+1 is junk
 				//and we need to return now
@@ -197,56 +198,4 @@ impl Vm<'_> {
 			code=code.wrapping_add(1);
 		}
 	}
-
-	// pub unsafe fn excute_code(&mut self, mut ip: *const Code) { unsafe {
-    //     use core::sync::atomic::Ordering::Relaxed;
-
-    //     loop {
-    //         /* ───── 1.  finished executing a word? ───── */
-    //         if ip.is_null() {
-    //             match self.return_stack.pop() {
-    //                 // Resume the caller that is waiting on the top frame
-    //                 Some(resume) => {
-    //                     // If there is no upper frame then our n+1 is garbage
-    //                     // this was the last frame we are now poping so we must be existing
-    //                     if self.return_stack.is_empty() {
-    //                         return;
-    //                     }
-    //                     ip = resume;
-    //                     continue;
-    //                 }
-    //                 // No caller → top-level NULL.  We are done.
-    //                 None => return,
-    //             }
-    //         }
-
-    //         /* ───── 2.  dispatch current cell ───── */
-    //         match (*ip).f.load(Relaxed) {
-    //             /* 2a. Primitive / built-in */
-    //             Some(prim) => {
-    //                 // Execute the primitive.
-    //                 let mut next = (prim)(ip, self);
-
-    //                 // The old outer loop always advanced one cell *after*
-    //                 // returning from a child call – do the same.
-    //                 if !next.is_null() {
-    //                     next = next.wrapping_add(1);
-    //                 }
-    //                 ip = next;
-    //             }
-
-    //             /* 2b. Colon definition – jump into it */
-    //             None => {
-    //                 // Push the return address (cell after this word).
-    //                 self.return_stack
-    //                     .push(ip.wrapping_add(1))
-    //                     .expect("return stack overflow");
-
-    //                 // Enter the definition’s first cell.
-    //                 ip = (*ip).param.load(Relaxed);
-    //             }
-    //         }
-    //     }
-    // }}
-
 }
