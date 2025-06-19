@@ -6,6 +6,7 @@ use crate::vm::Code;
 pub mod stack;
 pub mod buildins;
 pub mod vm;
+pub mod lex;
 
 pub mod types;
 

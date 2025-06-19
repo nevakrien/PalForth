@@ -44,15 +44,24 @@ unsafe impl<'m, T: Sync> Sync for StackRef<'m, T> {}
 impl<'mem, T> StackRef<'mem, T> {
     /// Empty stack over an *uninitialised* slice.
     #[inline]
-    pub fn from_slice(buf: &'mem mut [MaybeUninit<T>]) -> Self {
+    pub const fn from_slice(buf: &'mem mut [MaybeUninit<T>]) -> Self {
         let end   = buf.as_mut_ptr() as *mut T;       // low addr
+        let above = unsafe { end.add(buf.len()) };    // one-past high addr
+        Self { above, head: above, end, _ph: PhantomData }
+    }
+
+
+    /// Empty stack over an *uninitialised* slice.
+    #[inline]
+    pub const fn from_slice_raw(buf: *mut [MaybeUninit<T>]) -> Self {
+        let end   = buf as *mut T;       // low addr
         let above = unsafe { end.add(buf.len()) };    // one-past high addr
         Self { above, head: above, end, _ph: PhantomData }
     }
 
     /// Stack that is **full** (all elements initialised).
     #[inline]
-    pub fn new_full(buf: &'mem mut [T]) -> Self
+    pub const fn new_full(buf: &'mem mut [T]) -> Self
     where
         T: Copy,
     {
@@ -63,7 +72,7 @@ impl<'mem, T> StackRef<'mem, T> {
 
     /// Convert back to the original uninitialised slice.
     #[inline]
-    pub fn to_slice(self) -> &'mem mut [MaybeUninit<T>] {
+    pub const fn to_slice(self) -> &'mem mut [MaybeUninit<T>] {
         unsafe {
             let len = self.above.offset_from(self.end) as usize;
             from_raw_parts_mut(self.end as *mut _, len)

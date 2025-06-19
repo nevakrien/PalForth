@@ -1,3 +1,5 @@
+// use crate::lex::Lex;
+use crate::lex::Lex;
 use crate::buildins::unwrap_under;
 use crate::buildins::unwrap_over;
 use core::ptr;
@@ -9,7 +11,7 @@ use crate::PalData;
 use crate::stack::StackRef;
 use core::mem::transmute;
 
-pub type BuildinFunc =  for<'vm> unsafe extern "C-unwind" fn(*const Code,&mut Vm<'vm>) -> *const Code;
+pub type BuildinFunc =  for<'vm> unsafe extern "C-unwind" fn(*const Code,&mut Vm<'vm,'_>) -> *const Code;
 
 
 #[derive(Debug)]
@@ -130,20 +132,22 @@ impl<const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE>{
 			data_stack:StackRef::from_slice(&mut self.data),
 			return_stack:StackRef::from_slice(&mut self.rs),
 			type_stack:StackRef::from_slice(&mut self.types),
+			lex:None,
 		}
 	}
 }
 
-pub struct Vm<'a> {
+
+pub struct Vm<'a,'lex> {
 	pub param_stack:StackRef<'a, *mut PalData> ,
 	pub data_stack:StackRef<'a, PalData>,
 	pub return_stack:StackRef<'a, *const Code>,
 
 	pub type_stack:StackRef<'a, PalData>,
-	// pub struct 
+	pub lex: Option<&'a mut Lex<'lex>>
 }
 
-impl Vm<'_> {
+impl Vm<'_, '_> {
 
 	/// # Safety
 	/// the code must be safe to excute in a threaded way (ie no use of return stack for control flow)
