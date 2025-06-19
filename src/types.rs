@@ -5,23 +5,29 @@ pub const WRITE_FLAG: u8  = 0x2;
 pub const UNIQUE_FLAG: u8 = 0x4;
 pub const OUTPUT_FLAG: u8 = 0x8;
 
-pub enum TypeError{
+pub type RwT = u8;
+
+pub enum SigError<'lex>{
+    WrongType{found:&'lex Type<'lex>,wanted:&'lex Type<'lex>},//puting invalids here is UB
     NeedsUnique,
 	AlreadyBorrowed,
 	BasicSigError(RwT),//first 4bits which type of error later 4bits whether sig has that field on
 }
-impl fmt::Display for TypeError {
+impl fmt::Display for SigError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeError::NeedsUnique => write!(
+            SigError::WrongType { found, wanted } => {
+                writeln!(f, "  - expected {}, but got {}", wanted.name, found.name)
+            }
+            SigError::NeedsUnique => write!(
                 f,
                 "Cannot borrow mutably: value is already borrowed (requires unique access)"
             ),
-            TypeError::AlreadyBorrowed => write!(
+            SigError::AlreadyBorrowed => write!(
                 f,
                 "Cannot borrow mutably: value is currently borrowed as unique"
             ),
-            TypeError::BasicSigError(flags) => {
+            SigError::BasicSigError(flags) => {
                 let have = flags & 0x0F;
                 let want = (flags & 0xF0) >> 4;
 
@@ -43,29 +49,77 @@ impl fmt::Display for TypeError {
                 }
 
                 Ok(())
-            }
+            },
         }
     }
 }
 
-impl fmt::Debug for TypeError {
+impl fmt::Debug for SigError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
+        writeln!(f,"SigError(\"{self}\")")
     }
 }
 
-pub type RwT = u8;
+#[derive(Debug)]
+pub struct Type<'lex>{
+    pub size:usize,
+    pub name:&'lex str,
+    pub inner:TypeInner<'lex>,
+}
 
 #[derive(Debug)]
-pub struct BoxVar {
-    pub r#type: *mut core::ffi::c_void,
+pub enum TypeInner<'lex>{
+    Basic,
+    Alias(&'lex Type<'lex>),
+    Array(&'lex Type<'lex>),
+    Tuple(&'lex [Type<'lex>]),
+}
+
+#[derive(Debug)]
+pub struct SigItem<'lex>{
+    pub tp: &'lex Type<'lex>,
+    pub permissions: RwT, 
+}
+impl fmt::Display for SigItem<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} [", self.tp.name)?;
+
+        let mut first = true;
+        if self.permissions & READ_FLAG != 0 {
+            if !first { write!(f, ", ")?; }
+            write!(f, "read")?;
+            first = false;
+        }
+        if self.permissions & WRITE_FLAG != 0 {
+            if !first { write!(f, ", ")?; }
+            write!(f, "write")?;
+            first = false;
+        }
+        if self.permissions & UNIQUE_FLAG != 0 {
+            if !first { write!(f, ", ")?; }
+            write!(f, "unique")?;
+            first = false;
+        }
+        if self.permissions & OUTPUT_FLAG != 0 {
+            if !first { write!(f, ", ")?; }
+            write!(f, "output")?;
+        }
+
+        write!(f, "]")
+    }
+}
+
+
+#[derive(Debug)]
+pub struct BoxVar<'lex> {
+    pub tp: &'lex Type<'lex>,
     pub offset_from_start: i32, // first local is 0
     pub num_borrowed: i32,      // unique borrow is -1
     pub permissions: RwT,
 }
 
 
-fn check_subset(box_perm: RwT, sig: RwT) -> Result<(),TypeError> {
+fn check_subset(box_perm: RwT, sig: RwT) -> Result<(),SigError<'static>> {
     let mut ans = 0;
 
     if (sig & UNIQUE_FLAG != 0) && (box_perm & UNIQUE_FLAG == 0) {
@@ -86,23 +140,26 @@ fn check_subset(box_perm: RwT, sig: RwT) -> Result<(),TypeError> {
     }
     
     if ans!=0 {
-    	Err(TypeError::BasicSigError(ans))
+    	Err(SigError::BasicSigError(ans))
     }else{
     	Ok(())
     }
 }
 
-pub fn use_box_as(box_var: &mut BoxVar, sig: RwT) -> Result<(),TypeError> {
-    check_subset(box_var.permissions, sig)?;
+pub fn use_box_as<'lex>(box_var: &mut BoxVar<'lex>, sig: SigItem<'lex>) -> Result<(),SigError<'lex>> {
+    if box_var.tp as *const _ !=sig.tp as *const _{
+        return Err(SigError::WrongType { found:box_var.tp, wanted:sig.tp})
+    }
+    check_subset(box_var.permissions, sig.permissions)?;
 
     if box_var.num_borrowed == -1 {
-        return Err(TypeError::AlreadyBorrowed);
+        return Err(SigError::AlreadyBorrowed);
     }
-    if (sig & UNIQUE_FLAG != 0) && box_var.num_borrowed != 0 {
-        return Err(TypeError::NeedsUnique);
+    if (sig.permissions & UNIQUE_FLAG != 0) && box_var.num_borrowed != 0 {
+        return Err(SigError::NeedsUnique);
     }
 
-    if sig & UNIQUE_FLAG != 0 {
+    if sig.permissions & UNIQUE_FLAG != 0 {
         box_var.num_borrowed = -1;
     } else {
         box_var.num_borrowed += 1;
@@ -118,3 +175,7 @@ pub fn free_box_use(box_var: &mut BoxVar, sig: RwT) {
         box_var.num_borrowed -= 1;
     }
 }
+
+// pub fn check_sig<'lex>(box_var: &mut StackRef<'a, Type>, sig: SigItem<'lex>) -> Result<(),SigError<'lex>>{
+
+// }

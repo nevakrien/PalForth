@@ -1,3 +1,4 @@
+use crate::buildins::unwrap_under;
 use crate::buildins::unwrap_over;
 use core::ptr;
 use core::sync::atomic::Ordering;
@@ -77,6 +78,12 @@ impl Code{
 	}
 
 	#[inline]
+	pub fn basic_raw(f:BuildinFunc,p:*const Code)->Self{
+		Code{f:BuildinPtr::new(f),param: AtomicPtr::new(p as *mut _)}
+
+	}
+
+	#[inline]
 	pub fn word(c:&[Code])->Self{
 		Code{f:BuildinPtr::empty(),param:AtomicPtr::new(c as *const [_] as *const _ as *mut _)}
 	}
@@ -138,48 +145,50 @@ pub struct Vm<'a> {
 
 impl Vm<'_> {
 
-	// pub unsafe fn excute_code(&mut self,code:*const Code) -> *const Code{
-	// 	unsafe{
-	// 		match (*code).f.load(Ordering::Relaxed) {
-	// 			Some(x) => (x)(code,self),
-	// 			None => {
-	// 				let mut code = (*code).param.load(Ordering::Relaxed) as *const _;
-	// 				loop {
-	// 					code = self.excute_code(code);
-	// 					if code.is_null(){
-	// 						return code;
-	// 					}
-	// 					//anoyingly some jumps may be 1 below the allocation so we need this
-	// 					code = code.wrapping_add(1)
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// }
-
 	/// # Safety
+	/// the code must be safe to excute in a threaded way (ie no use of return stack for control flow)
 	/// the pointer past must point to valid code
 	/// the stacks must contain the correct inputs
-	pub unsafe fn excute_code(&mut self,mut code:*const Code){		
+	pub unsafe fn excute_threaded(&mut self,code:*const Code) -> *const Code{
+		unsafe{
+			match (*code).f.load(Ordering::Relaxed) {
+				Some(x) => (x)(code,self),
+				None => {
+					let mut code = (*code).param.load(Ordering::Relaxed) as *const _;
+					loop {
+						code = self.excute_threaded(code);
+						if code.is_null(){
+							return code;
+						}
+						//anoyingly some jumps may be 1 below the allocation so we need this
+						code = code.wrapping_add(1)
+					}
+				}
+			}
+		}
+	}
+
+	// /// # Safety
+	// /// the pointer past must point to valid code
+	// /// the stacks must contain the correct inputs
+	pub unsafe fn excute_code(&mut self,mut code:*const Code){ unsafe {		
 		//compiler can load the return stack
 		loop{
 			//first get a primitive and run it
-			unsafe{
-				let mut primitive = (*code).f.load(Ordering::Relaxed);
-				while primitive.is_none() {
-					unwrap_over(self.return_stack.push(code).ok());
-					code = (*code).param.load(Ordering::Relaxed) as *const _;
-					primitive = (*code).f.load(Ordering::Relaxed);
-				}
+			let mut primitive = (*code).f.load(Ordering::Relaxed);
+			while primitive.is_none() {
+				unwrap_over(self.return_stack.push(code).ok());
+				code = (*code).param.load(Ordering::Relaxed) as *const _;
+				primitive = (*code).f.load(Ordering::Relaxed);
+			}
 
-				code=primitive.unwrap_unchecked()(code,self)
+			code=primitive.unwrap_unchecked()(code,self);
 
-				//compiler must unload the return stack since we just called &mut Vm
-				//it will now (likely) load it again since no calls with &mut Vm are made after
-				//if we were to commit to optimizing this loop the trick would be to use head pointer directly
-				//however this means a VM cant switch its stack which means multi tasking cant works from within
-				//its better to allow out right switching the return stack as an internal
-			};
+			//compiler must unload the return stack since we just called &mut Vm
+			//it will now (likely) load it again since no calls with &mut Vm are made after
+			//if we were to commit to optimizing this loop the trick would be to use head pointer directly
+			//however this means a VM cant switch its stack which means multi tasking cant works from within
+			//its better to allow out right switching the return stack as an internal
 
 
 			//is there more code to run?
@@ -188,14 +197,74 @@ impl Vm<'_> {
 				//and we need to return now
 				//also if the return stack is empty
 				if self.return_stack.len()<=1{
-					let _ = self.return_stack.pop();
+					unwrap_under(self.return_stack.pop());
 					return
 				}
 
 				//this bit was rewritten as LLVM made sub par assembly
-				code = unsafe{self.return_stack.pop().unwrap_unchecked()};
+				code = self.return_stack.pop().unwrap_unchecked();
 			}
-			code=code.wrapping_add(1);
+			code=code.wrapping_add(1); //add is the same whether or not you are an internal
 		}
-	}
+	}}
 }
+	
+// 	/// # Safety
+// 	/// the pointer must point to valid code
+//     #[inline(always)]
+//     pub unsafe fn descend_to_primitive(&mut self, mut ip: *const Code) -> *const Code { unsafe {
+//         use core::sync::atomic::Ordering::Relaxed;
+
+//         #[cfg(feature = "trace_vm")]
+//         println!("decending {ip:?}");
+
+//         // Walk through "colon" headers, stacking each one.
+//         let mut f = (*ip).f.load(Relaxed);
+//         while f.is_none() {
+//             // Push the *header* (not header+1 — consistent with your scheme)
+//             self.return_stack.push(ip).unwrap();
+//             ip = (*ip).param.load(Relaxed) as *const Code;
+
+//             #[cfg(feature = "trace_vm")]
+//        		println!("found {ip:?} in decent");
+
+//             f  = (*ip).f.load(Relaxed);
+//         }
+//         ip // guaranteed primitive cell
+//     }}
+
+//     /// # Safety
+// 	/// the pointer past must point to valid code
+// 	/// the stacks must contain the correct inputs
+//     pub unsafe fn excute_code(&mut self, mut ip: *const Code) {
+//         #[cfg(feature = "trace_vm")]
+// 	    println!("starting excute_code with {ip:?}");
+
+
+//         loop {
+//             /* 1. descend, then run the primitive */
+//             unsafe {
+//                 ip = self.descend_to_primitive(ip);
+//                 let prim = (*ip).f.load(Ordering::Relaxed).unwrap_unchecked();
+//                 ip = prim(ip, self);
+//             }
+
+//             /* 2. finished a word?  pop caller or return */
+//             if ip.is_null() {
+//                 if self.return_stack.len() <= 1 {
+//                     self.return_stack.pop().unwrap();
+//                     return;
+//                 }
+//                 ip = unsafe{self.return_stack.pop().unwrap_unchecked()};
+
+//                 #[cfg(feature = "trace_vm")]{
+//                 	let return_target = ip.wrapping_add(1);
+// 	        		println!("returning into {return_target:?}");
+// 	        	}
+//             }
+
+//             /* 3. step to next threaded cell */
+//             ip = ip.wrapping_add(1);
+//         }
+//     }
+// }

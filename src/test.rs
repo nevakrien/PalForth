@@ -305,3 +305,94 @@ fn nested_word_dup() {
     assert_eq!(vm.param_stack.pop().unwrap(), canary);
     assert_eq!(vm.param_stack.write_index(), 0);
 }
+
+#[test]
+fn if_branch_behavior() {
+    let mut mem = VmEasyMemory::<16>::new();
+    let mut vm = mem.make_vm();
+
+    let jump_code = [
+        Code::basic(pick, 0),    // duplicate top
+        Code::basic(ret, 0),
+    ];
+
+    let target = (&jump_code as *const Code).wrapping_sub(1);
+
+    let cond_code = [
+        Code::basic_raw(_if, target),
+        Code::basic(ret, 0),
+    ];
+    let cond_word = Code::word(&cond_code);
+
+    let canary = 999usize as *mut _;
+    let mut flag = UnsafeCell::new(TRUE);
+    vm.param_stack.push(canary).unwrap();
+    vm.param_stack.push(flag.get() as *mut _).unwrap();
+
+    unsafe {
+        vm.excute_code(&cond_word as *const Code);
+        assert_eq!(vm.param_stack.pop().unwrap(), canary);
+        assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    }
+
+    // reset and test false path
+    *flag.get_mut() = FALSE;
+    vm.param_stack.push(canary).unwrap();
+    vm.param_stack.push(flag.get() as *mut _).unwrap();
+
+    unsafe {
+        vm.excute_code(&cond_word as *const Code);
+        assert_eq!(vm.param_stack.pop().unwrap(), canary);
+        assert_eq!(vm.param_stack.write_index(), 0);
+    }
+}
+
+#[test]
+fn call_dyn_executes_target() {
+    let canary = 123usize as *mut _;
+
+    let mut mem = VmEasyMemory::<16>::new();
+    let mut vm = mem.make_vm();
+
+    let dup_code = [
+        Code::basic(pick, 0),
+        Code::basic(no_op, 0),
+        Code::basic(ret, 0),
+    ];
+    let dup_word = Code::word(&dup_code);
+    let mut dyn_target = PalData{code:&dup_word};
+
+//====== threaded =========
+    let call_code = [
+        Code::basic(call_dyn_threaded, 0),
+        Code::basic(ret, 0),
+    ];
+    let call_word = Code::word(&call_code);
+
+    vm.param_stack.push(canary).unwrap();
+    vm.param_stack.push(&mut dyn_target).unwrap();
+
+    unsafe {
+        vm.excute_code(&call_word as *const Code);
+        assert_eq!(vm.param_stack.pop().unwrap(), canary);
+        assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    }
+
+//====== non threaded =========
+    let call_code = [
+        Code::basic(call_dyn, 0),
+        Code::basic(no_op, 0),
+        Code::basic(no_op, 0),
+        Code::basic(ret, 0),
+    ];
+    let call_word = Code::word(&call_code);
+
+    vm.param_stack.push(canary).unwrap();
+    vm.param_stack.push(&mut dyn_target).unwrap();
+
+    unsafe {
+        vm.excute_code(&call_word as *const Code);
+        assert_eq!(vm.param_stack.pop().unwrap(), canary);
+        assert_eq!(vm.param_stack.pop().unwrap(), canary);
+    }
+}

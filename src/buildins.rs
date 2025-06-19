@@ -12,7 +12,6 @@ use crate::{PalData, PalBool};
 
 
 
-
 /*════════════════ helpers ════════════════*/
 
 #[inline(always)]
@@ -54,6 +53,13 @@ macro_rules! vm_trace {
             println!("executing {}", $name);
         }
     };
+}
+
+/*═════════════════════════════ main ════════════════════════════════*/
+
+
+pub unsafe extern "C-unwind" fn no_op(code_ptr: *const Code, _: &mut Vm) -> *const Code{
+    code_ptr
 }
 
 /* ───────────────── memory / frame ops ───────────────── */
@@ -135,6 +141,18 @@ pub unsafe extern "C-unwind" fn branch(code_ptr: *const Code, vm: &mut Vm) -> *c
     if *cond { code_ptr.wrapping_offset(offset) } else { code_ptr }
 }}
 
+pub unsafe extern "C-unwind" fn _if(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
+    let cond   = pop!(vm) as *const PalBool;
+    let target = param(code_ptr) as *const Code;
+
+    #[cfg(feature = "trace_vm")]{
+        let ans = *cond;
+        println!("branching based on {cond:?} got {ans}");
+    }
+
+    if *cond { target } else { code_ptr }
+}}
+
 //this is for platforms without a JIT
 //if there is a JIT allways prefer JITing a simple return_x and writing it to the f side
 pub unsafe extern "C-unwind" fn maybe_backpatch(code_ptr: *const Code, _vm: &mut Vm) -> *const Code { unsafe {
@@ -151,8 +169,42 @@ pub unsafe extern "C-unwind" fn jump(code_ptr: *const Code, _vm: &mut Vm) -> *co
     code_ptr.wrapping_offset(param(code_ptr) as isize)
 }}
 
-pub unsafe extern "C-unwind" fn call_dyn(_code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
-    pop!(vm) as *const Code
+pub unsafe extern "C-unwind" fn tail_call(code_ptr: *const Code, _vm: &mut Vm) -> *const Code { unsafe {
+    param(code_ptr)
+}}
+
+pub unsafe extern "C-unwind" fn call_dyn(call_site: *const Code,
+                                         vm: &mut Vm) -> *const Code
+{   unsafe {
+        let target = (*pop!(vm)).code;
+
+        #[cfg(feature = "trace_vm")]
+        println!("calling {target:?} dynamically from {call_site:?}");
+
+        //we want the return to be to us not outer scope
+        match (*target).f.load(Ordering::Relaxed) {
+            None => {
+                unwrap_over(vm.return_stack.push(call_site).ok());
+                param(target).wrapping_sub(1)
+
+            },
+            Some(f) => {
+                //we dont care how f branches no other valid branch
+                f(target,vm);
+                call_site
+            }
+        }
+    }
+}
+
+
+pub unsafe extern "C-unwind" fn call_dyn_threaded(_code: *const Code, vm: &mut Vm) -> *const Code { unsafe {
+    let code = (*pop!(vm)).code;
+    
+    #[cfg(feature = "trace_vm")]
+    println!("calling {code:?} dynamically");
+
+    vm.excute_threaded(code)
 }}
 
 // no unsafe needed, just null return
