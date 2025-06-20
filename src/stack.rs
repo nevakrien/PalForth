@@ -15,6 +15,9 @@ pub fn make_storage<T, const N: usize>() -> [MaybeUninit<T>; N] {
     unsafe { MaybeUninit::uninit().assume_init() }
 }
 
+#[derive(Debug,Clone,Copy,PartialEq)]
+pub struct StackCheckPoint<T>(*mut T);
+
 /*──────────────────── stack type ───────────────────────*/
 
 /// A **down-growing** fixed-capacity LIFO stack.
@@ -193,7 +196,7 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
-/*──────────────────── push / pop ───────────────────────*/
+/*──────────────────── allocs ───────────────────────*/
     /// flushes elements from the stack 
     #[inline]
     pub fn flush(&mut self, len:usize) -> Option<()>{
@@ -235,7 +238,19 @@ impl<'mem, T> StackRef<'mem, T> {
         self.head = unsafe{self.head.sub(len)};
         Some(())
     }
+/*──────────────────── checkpoint ───────────────────────*/
 
+#[inline]
+    pub fn check_point(&self)-> StackCheckPoint<T>{
+        StackCheckPoint(self.head)
+    }
+
+    /// # Safety
+    /// nothing points to memory we are currently freeing
+    #[inline]
+    pub unsafe fn goto_checkpoint(&mut self,check_point:StackCheckPoint<T>){
+        self.head=check_point.0;
+    }
 /*──────────────────── peek helpers ─────────────────────*/
     #[inline]
     pub fn peek<'b>(&'b self) -> Option<&'b T> {
@@ -278,7 +293,7 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
-/*──────────────────── drop & split ─────────────────────*/
+/*──────────────────── complex handeling ─────────────────────*/
     /// Drop `count` items located `skip` elements below the top.
     pub fn drop_inside(&mut self, skip: usize, count: usize) -> Option<()> {
         if skip + count > self.write_index() {

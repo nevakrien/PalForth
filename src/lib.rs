@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 
+use hashbrown::HashMap;
 use crate::vm::Code;
 
 pub mod stack;
@@ -12,6 +13,9 @@ pub mod types;
 
 #[cfg(test)]
 pub mod test;
+
+type PalHash<K, V> = HashMap<K, V>; // use default hasher and allocator
+
 
 pub type PalInt = i64;
 pub type PalBool = bool;

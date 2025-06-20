@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["trace_vm"]                     # No features enabled by default
+default = []                     # No features enabled by default
 unchecked_underflow = []         # Enables unchecked pop/spot
 unchecked_overflow = []          # Enables unchecked push
 std = []
 trace_vm=["std"]
 
 [dependencies]
+hashbrown = { version = "0.15.4", default-features = false,features=["default-hasher"] }

@@ -172,9 +172,9 @@ impl Vm<'_, '_> {
 		}
 	}
 
-	// /// # Safety
-	// /// the pointer past must point to valid code
-	// /// the stacks must contain the correct inputs
+	/// # Safety
+	/// the pointer past must point to valid code
+	/// the stacks must contain the correct inputs
 	pub unsafe fn excute_code(&mut self,mut code:*const Code){ unsafe {		
 		//compiler can load the return stack
 		loop{

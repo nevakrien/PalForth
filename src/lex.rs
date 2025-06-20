@@ -1,19 +1,39 @@
+use crate::PalHash;
+use crate::types::TypeInner;
+use crate::Code;
+use crate::types::Type;
 use core::{mem::MaybeUninit};
 use crate::stack::StackRef;
 
-pub struct Lex<'a>(StackRef<'a, u8>);
+
+
+pub struct Lex<'lex>{
+	pub code_mem:StackRef<'lex,Code>,
+	pub data_mem:StackAlloc<'lex>,
+
+	pub types_mem:StackRef<'lex,Type<'lex>>,
+
+	pub type_map:PalHash<&'lex TypeInner<'lex>,&'lex Type<'lex>>
+}
+
+//idk if we even need this
+//========= STACK ALLOC=============
+
+pub struct StackAlloc<'a>(StackRef<'a, u8>);
 
 #[derive(Debug,Clone,Copy)]
-pub struct LexCheckPoint(*mut u8);
+pub struct StackAllocCheckPoint(*mut u8);
 
-impl<'lex> Lex<'lex> {
+impl<'lex> StackAlloc<'lex> {
 	#[inline]
 	pub fn new(s:StackRef<'lex, u8>)->Self{
-		Lex(s)
+		StackAlloc(s)
 	}
 
-	#[inline(always)]
+	#[inline(always)]//we dont want 20 of these
 	pub fn alloc<T>(&mut self) -> Option<&'lex mut core::mem::MaybeUninit<T>> {
+		//this may seem like its unsound but StackRef holds the memory UNIQUELY
+		//for the duration of StackAlloc. so the only thing that can write to that memory is us
 
 	    /* ── ZST handling ──────────────────────────────────────────── */
 	    if size_of::<T>() == 0 {
@@ -40,14 +60,14 @@ impl<'lex> Lex<'lex> {
 
 
 	#[inline]
-	pub fn check_point(&self)->LexCheckPoint{
-		LexCheckPoint(self.0.head)
+	pub fn check_point(&self)->StackAllocCheckPoint{
+		StackAllocCheckPoint(self.0.head)
 	}
 
 	/// # Safety
 	/// nothing points to memory we are currently freeing
 	#[inline]
-	pub unsafe fn goto_checkpoint(&mut self,check_point:LexCheckPoint){
+	pub unsafe fn goto_checkpoint(&mut self,check_point:StackAllocCheckPoint){
 		self.0.head=check_point.0;
 	}
 }
@@ -75,11 +95,11 @@ use super::*;
 
 
     #[test]
-    fn lex_allocations() {
+    fn stack_alloc_aligment() {
         // 1 KiB is plenty for the test; adjust if your arena requires more.
         let mut backing: [_; 1024] = make_storage();
         // Safety: we hand the arena exclusive access to `backing`.
-        let mut arena =Lex::new(StackRef::from_slice(&mut backing));
+        let mut arena =StackAlloc::new(StackRef::from_slice(&mut backing));
 
         /* ── plain u16 (align = 2) ─────────────────────────────────── */
         let s1 = arena.alloc::<u16>().expect("u16 should fit");
