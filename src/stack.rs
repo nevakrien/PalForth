@@ -98,7 +98,7 @@ impl<'mem, T> StackRef<'mem, T> {
     /// **Unchecked**: set depth directly (0 ≤ `idx` ≤ capacity).
     /// # Safety
     /// - the index must be in the stacks range
-    /// - this now allows bad reads but non would be excuted automatically
+    /// - this now allows bad reads but non would be executed automatically
     #[inline]
     pub unsafe fn set_write_index(&mut self, idx: usize) { unsafe {
         self.head = self.above.sub(idx);

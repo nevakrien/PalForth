@@ -204,7 +204,7 @@ pub unsafe extern "C-unwind" fn call_dyn_threaded(_code: *const Code, vm: &mut V
     #[cfg(feature = "trace_vm")]
     println!("calling {code:?} dynamically");
 
-    vm.excute_threaded(code)
+    vm.execute_threaded(code)
 }}
 
 // no unsafe needed, just null return

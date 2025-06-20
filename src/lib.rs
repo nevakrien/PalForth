@@ -8,8 +8,8 @@ pub mod stack;
 pub mod buildins;
 pub mod vm;
 pub mod lex;
-
 pub mod types;
+pub mod ir;
 
 #[cfg(test)]
 pub mod test;

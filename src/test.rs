@@ -59,7 +59,7 @@ fn round_trip_inject() {
     std::println!("src {psrc:?} tgt {ptgt:?} data_stack_top {data_stack_head:?}",);
 
     unsafe{
-        vm.excute_code(&word as *const Code);
+        vm.execute_code(&word as *const Code);
 
         for (s,t) in src.iter().zip(tgt){
             assert_eq!(s.int,t.int);
@@ -78,7 +78,7 @@ fn stack_underflow_panics() {
 
     extern crate std;
     let res = std::panic::catch_unwind(AssertUnwindSafe(|| unsafe {
-        vm.excute_code(&word as *const Code); // empty stack → should panic
+        vm.execute_code(&word as *const Code); // empty stack → should panic
     }));
 
     assert!(res.is_err(), "param_drop on empty stack must panic");
@@ -97,7 +97,7 @@ fn core_operations() {
 
     let canary = 321usize as *mut _;
     vm.param_stack.push(canary).unwrap();
-    unsafe { vm.excute_code(&dup_word as *const Code) };
+    unsafe { vm.execute_code(&dup_word as *const Code) };
 
     assert_eq!(vm.param_stack.pop().unwrap(), canary);
     assert_eq!(vm.param_stack.pop().unwrap(), canary);
@@ -114,13 +114,13 @@ fn core_operations() {
 
     let mut b = UnsafeCell::new(PalData{bool:TRUE});
     vm.param_stack.push(b.get() as *mut _).unwrap();
-    unsafe { vm.excute_code(&maybe_dup as *const Code) };
+    unsafe { vm.execute_code(&maybe_dup as *const Code) };
     assert_eq!(vm.param_stack.write_index(), 0);
 
     vm.param_stack.push(canary).unwrap();
     *b.get_mut() = PalData{bool:FALSE};
     vm.param_stack.push(b.get() as *mut _).unwrap();
-    unsafe { vm.excute_code(&maybe_dup as *const Code) };
+    unsafe { vm.execute_code(&maybe_dup as *const Code) };
     assert_eq!(vm.param_stack.pop().unwrap(), canary);
     assert_eq!(vm.param_stack.pop().unwrap(), canary);
 }
@@ -154,7 +154,7 @@ fn integer_arithmetics() {
             arith_code.get_mut()[2] = Code::basic($builtin, 0);
             
             unsafe { 
-                vm.excute_code(&arith_word as *const Code); 
+                vm.execute_code(&arith_word as *const Code); 
                 assert_eq!(a.get_mut().int, $expect);
             }
         }};
@@ -206,7 +206,7 @@ fn bool_and_comparisons() {
             *y.get_mut() = PalData { int: $r };
             (cmp_code.get_mut())[3]  = Code::basic($builtin, 0);
             unsafe { 
-                vm.excute_code(&cmp_word as *const Code);
+                vm.execute_code(&cmp_word as *const Code);
                 assert_eq!(*res.get() == TRUE, $ok);
             }
         }};
@@ -243,7 +243,7 @@ fn bool_and_comparisons() {
             *rhs.get_mut() = PalData { bool: $r };
             (bool_code.get_mut())[2]   = Code::basic($builtin, 0);
             unsafe { 
-                vm.excute_code(&bool_word as *const Code);
+                vm.execute_code(&bool_word as *const Code);
                 assert_eq!((*lhs.get()).bool == TRUE, $expect); 
             };
             
@@ -268,7 +268,7 @@ fn bool_and_comparisons() {
 
     vm.param_stack.push(v.get() as *mut _).unwrap();
     unsafe { 
-        vm.excute_code(&not_word as *const Code);
+        vm.execute_code(&not_word as *const Code);
         assert_eq!(*v.get_mut() == FALSE, true);
     }
 }
@@ -298,7 +298,7 @@ fn nested_word_dup() {
     let canary = 321usize as *mut _;
     vm.param_stack.push(canary).unwrap();
 
-    unsafe { vm.excute_code(&outer_word as *const Code) };
+    unsafe { vm.execute_code(&outer_word as *const Code) };
 
     // Stack should now contain two identical pointers
     assert_eq!(vm.param_stack.pop().unwrap(), canary);
@@ -330,7 +330,7 @@ fn if_branch_behavior() {
     vm.param_stack.push(flag.get() as *mut _).unwrap();
 
     unsafe {
-        vm.excute_code(&cond_word as *const Code);
+        vm.execute_code(&cond_word as *const Code);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
     }
@@ -341,7 +341,7 @@ fn if_branch_behavior() {
     vm.param_stack.push(flag.get() as *mut _).unwrap();
 
     unsafe {
-        vm.excute_code(&cond_word as *const Code);
+        vm.execute_code(&cond_word as *const Code);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
         assert_eq!(vm.param_stack.write_index(), 0);
     }
@@ -373,7 +373,7 @@ fn call_dyn_executes_target() {
     vm.param_stack.push(&mut dyn_target).unwrap();
 
     unsafe {
-        vm.excute_code(&call_word as *const Code);
+        vm.execute_code(&call_word as *const Code);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
     }
@@ -391,7 +391,7 @@ fn call_dyn_executes_target() {
     vm.param_stack.push(&mut dyn_target).unwrap();
 
     unsafe {
-        vm.excute_code(&call_word as *const Code);
+        vm.execute_code(&call_word as *const Code);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
     }

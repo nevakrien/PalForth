@@ -10,13 +10,10 @@ use crate::stack::StackRef;
 pub struct Lex<'lex>{
 	pub code_mem:StackRef<'lex,Code>,
 	pub data_mem:StackAlloc<'lex>,
-
 	pub types_mem:StackRef<'lex,Type<'lex>>,
-
-	pub type_map:PalHash<&'lex TypeInner<'lex>,&'lex Type<'lex>>
+	pub type_map:PalHash<&'lex TypeInner<'lex>,&'lex Type<'lex>>,
 }
 
-//idk if we even need this
 //========= STACK ALLOC=============
 
 pub struct StackAlloc<'a>(StackRef<'a, u8>);
@@ -72,6 +69,70 @@ impl<'lex> StackAlloc<'lex> {
 	}
 }
 
+//========= TYPED STACK ALLOC =============
+
+/// An arena-style bump allocator that grows **downward** and hands out
+/// `&'arena mut MaybeUninit<T>` for a *single, concrete* `T`.
+///
+/// Compared with the untyped `StackAlloc<'a, u8>`:
+/// * no alignment math – the backing slice is `[MaybeUninit<T>]`
+/// * “size” is counted in *elements*, not bytes
+/// * still handles ZSTs without moving the head
+pub struct StackAllocator<'a, T>(StackRef<'a, T>);
+
+#[derive(Debug, Clone, Copy)]
+pub struct StackAllocatorCheckPoint<T>(*mut T);
+
+impl<T> Drop for StackAllocator<'_, T>{
+
+fn drop(&mut self) {
+	while self.0.pop().is_some(){
+
+	}
+}
+}
+
+impl<'a, T> StackAllocator<'a, T> {
+    #[inline]
+    pub fn new(storage: &'a mut [MaybeUninit<T>]) -> Self {
+        Self(StackRef::from_slice(storage))
+    }
+
+    pub fn save(&mut self,elem:T)->Result<&'a mut T,T>{
+    	if size_of::<T>() == 0 {
+            return Ok(unsafe {&mut* core::ptr::dangling_mut()});
+        }
+
+    	unsafe{
+    		match self.0.alloc(1){
+    			None=>Err(elem),
+    			Some(_)=>{
+    				let mem = self.0.spot_raw(0).unwrap_unchecked();
+    				mem.write(elem);
+    				Ok(&mut*mem)
+    			}
+    		}
+    	}
+    }
+
+    /// A snapshot of the current bump pointer.
+    #[inline]
+    pub fn check_point(&self) -> StackAllocatorCheckPoint<T> {
+        StackAllocatorCheckPoint(self.0.head)
+    }
+
+    /// # Safety
+    /// Caller must guarantee that *nothing* still points inside the region that
+    /// is being rolled back (identical to the byte allocator’s contract).
+    #[inline]
+    pub unsafe fn goto_checkpoint(&mut self, cp: StackAllocatorCheckPoint<T>) { unsafe {
+    	while self.0.head!=cp.0{
+    		let _ = self.0.pop().unwrap_unchecked();
+    	}
+    }}
+}
+
+
 #[cfg(test)]
 mod tests {
     use crate::stack::make_storage;
@@ -91,7 +152,7 @@ use super::*;
 	#[derive(Copy,Clone,Debug,PartialEq)]
 	struct OverAligned(u8);
 
-	struct ZFT;
+	struct Zst;
 
 
     #[test]
@@ -119,8 +180,8 @@ use super::*;
         }
 
         /* ── zero-sized type (size = 0, align = 1) ─────────────────── */
-        let s3 = arena.alloc::<ZFT>().expect("ZST");
-        *s3 = MaybeUninit::new(ZFT);
+        let s3 = arena.alloc::<Zst>().expect("ZST");
+        *s3 = MaybeUninit::new(Zst);
 
         let a3 = addr_of(s3);
         assert_eq!(a3 % align_of::<()>(), 0);
@@ -145,4 +206,32 @@ use super::*;
         }
         assert!(arena.alloc::<u64>().is_none(), "OOM must remain OOM");
     }
+
+
+	#[test]
+	fn test_stack_allocator_basic() {
+	    extern crate std;
+	    use std::boxed::Box;
+
+	    let mut storage = [const { MaybeUninit::<Box<i32>>::uninit() }; 8];
+	    let mut alloc = StackAllocator::new(&mut storage);
+
+	    let a = alloc.save(Box::new(10)).unwrap();
+	    let b = alloc.save(Box::new(20)).unwrap();
+
+	    assert_eq!(**a, 10);
+	    assert_eq!(**b, 20);
+
+	    let cp = alloc.check_point();
+	    let c = alloc.save(Box::new(30)).unwrap();
+	    assert_eq!(*c, Box::new(30));
+
+	    unsafe {
+	        alloc.goto_checkpoint(cp);
+	    }
+
+	    // allocation after rollback should overwrite 30
+	    let d = alloc.save(Box::new(99)).unwrap();
+	    assert_eq!(*d, Box::new(99));
+	}
 }

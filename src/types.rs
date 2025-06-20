@@ -1,3 +1,7 @@
+use core::cell::RefCell;
+use crate::lex::StackAllocator;
+use core::cell::UnsafeCell;
+use crate::stack::StackRef;
 use crate::lex::Lex;
 use core::fmt;
 
@@ -16,6 +20,7 @@ pub enum AccessMode {
     Raw,
     Invalid,
 }
+
 
 impl AccessMode {
     pub fn from_bits(bits: RwT) -> Self {
@@ -202,7 +207,6 @@ pub struct BoxVar<'lex> {
     pub tp: &'lex Type<'lex>,
     pub offset_from_start: i32, // first local is 0
     pub num_borrowed: i32,      // unique borrow is -1
-    pub local:bool,//a local may not be returned as an index!!! or anything really, some weirdness around raws but for now thats unsafe
     pub permissions: RwT,
 }
 
@@ -238,7 +242,7 @@ fn check_subset(have: RwT, sig: RwT) -> Result<(),SigError<'static>> {
     }
 }
 
-pub fn use_box_as<'lex>(box_var: &mut BoxVar<'lex>, sig: SigItem<'lex>) -> Result<(),SigError<'lex>> {
+pub fn use_box_as<'lex>(box_var: &mut BoxVar<'lex>, sig: &SigItem<'lex>) -> Result<(),SigError<'lex>> {
     if box_var.tp as *const _ !=sig.tp as *const _{
         return Err(SigError::WrongType { found:box_var.tp, wanted:sig.tp})
     }
@@ -271,3 +275,35 @@ pub fn free_box_use(box_var: &mut BoxVar, sig: RwT) {
 // pub fn check_sig<'lex>(box_var: &mut StackRef<'a, Type>, sig: SigItem<'lex>) -> Result<(),SigError<'lex>>{
 
 // }
+
+/// # Safety
+/// changing any of the underlying stacks is considered unsound
+pub struct SigStack<'me, 'lex>{
+    size_locals:i32,
+    arena:StackAllocator<'me,RefCell<BoxVar<'lex>>>,
+    stack:StackRef<'me,&'me RefCell<BoxVar<'lex>>>,
+}
+
+impl<'me, 'lex> SigStack<'me, 'lex>{
+    pub fn add_local(&mut self,tp:&'lex Type<'lex>)->&'me RefCell<BoxVar<'lex>>{
+        let var = BoxVar{
+            tp,
+            permissions:READ_FLAG&WRITE_FLAG&UNIQUE_FLAG,
+            num_borrowed:0,
+            offset_from_start:self.size_locals,
+        };
+        let ans = self.arena.save(var.into()).expect("underflow local stack");
+        self.size_locals+=1;
+        ans
+    }
+
+    pub fn call_sig(&mut self,sig:&[SigItem<'lex>])->Result<(),SigError<'lex>>{
+        for t in sig.iter().rev(){
+            match self.stack.pop(){
+                None=>todo!(),
+                Some(b)=>use_box_as(&mut b.borrow_mut(),t)?,
+            };
+        }
+        Ok(())
+    }
+}

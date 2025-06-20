@@ -1,4 +1,5 @@
 // use crate::lex::Lex;
+use crate::types::BoxVar;
 use crate::lex::Lex;
 use crate::buildins::unwrap_under;
 use crate::buildins::unwrap_over;
@@ -11,7 +12,7 @@ use crate::PalData;
 use crate::stack::StackRef;
 use core::mem::transmute;
 
-pub type BuildinFunc =  for<'vm> unsafe extern "C-unwind" fn(*const Code,&mut Vm<'vm,'_>) -> *const Code;
+pub type BuildinFunc =  for<'vm> unsafe extern "C-unwind" fn(*const Code,&mut Vm<'vm>) -> *const Code;
 
 
 #[derive(Debug)]
@@ -105,7 +106,6 @@ pub struct VmEasyMemory<const STACK_SIZE : usize> {
 	param:[MaybeUninit<*mut PalData>;STACK_SIZE] ,
 	data:[MaybeUninit<PalData>;STACK_SIZE],
 	rs:[MaybeUninit<*const Code>;STACK_SIZE],
-	types:[MaybeUninit<PalData>;STACK_SIZE],
 }
 
 impl<const STACK_SIZE: usize > Default for VmEasyMemory<STACK_SIZE>{
@@ -115,52 +115,46 @@ fn default() -> Self {
 		param:make_storage(),
 		data:make_storage(),
 		rs:make_storage(),
-		types:make_storage(),
 	}
 }
 }
 
-impl<const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE>{
+impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE>{
 	pub fn new()->Self{
 		Self::default()
 
 	}
 
-	pub fn make_vm(&mut self) -> Vm{
+	pub fn make_vm(&mut self) -> Vm<'_>{
 		Vm{
 			param_stack:StackRef::from_slice(&mut self.param),
 			data_stack:StackRef::from_slice(&mut self.data),
 			return_stack:StackRef::from_slice(&mut self.rs),
-			type_stack:StackRef::from_slice(&mut self.types),
-			lex:None,
 		}
 	}
 }
 
 
-pub struct Vm<'a,'lex> {
+pub struct Vm<'a> {
 	pub param_stack:StackRef<'a, *mut PalData> ,
 	pub data_stack:StackRef<'a, PalData>,
 	pub return_stack:StackRef<'a, *const Code>,
 
-	pub type_stack:StackRef<'a, PalData>,
-	pub lex: Option<&'a mut Lex<'lex>>
 }
-
-impl Vm<'_, '_> {
+impl Vm<'_> {
 
 	/// # Safety
-	/// the code must be safe to excute in a threaded way (ie no use of return stack for control flow)
+	/// the code must be safe to execute in a threaded way (ie no use of return stack for control flow)
 	/// the pointer past must point to valid code
 	/// the stacks must contain the correct inputs
-	pub unsafe fn excute_threaded(&mut self,code:*const Code) -> *const Code{
+	pub unsafe fn execute_threaded(&mut self,code:*const Code) -> *const Code{
 		unsafe{
 			match (*code).f.load(Ordering::Relaxed) {
 				Some(x) => (x)(code,self),
 				None => {
 					let mut code = (*code).param.load(Ordering::Relaxed) as *const _;
 					loop {
-						code = self.excute_threaded(code);
+						code = self.execute_threaded(code);
 						if code.is_null(){
 							return code;
 						}
@@ -175,7 +169,7 @@ impl Vm<'_, '_> {
 	/// # Safety
 	/// the pointer past must point to valid code
 	/// the stacks must contain the correct inputs
-	pub unsafe fn excute_code(&mut self,mut code:*const Code){ unsafe {		
+	pub unsafe fn execute_code(&mut self,mut code:*const Code){ unsafe {		
 		//compiler can load the return stack
 		loop{
 			//first get a primitive and run it
@@ -240,9 +234,9 @@ impl Vm<'_, '_> {
 //     /// # Safety
 // 	/// the pointer past must point to valid code
 // 	/// the stacks must contain the correct inputs
-//     pub unsafe fn excute_code(&mut self, mut ip: *const Code) {
+//     pub unsafe fn execute_code(&mut self, mut ip: *const Code) {
 //         #[cfg(feature = "trace_vm")]
-// 	    println!("starting excute_code with {ip:?}");
+// 	    println!("starting execute_code with {ip:?}");
 
 
 //         loop {
