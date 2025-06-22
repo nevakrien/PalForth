@@ -5,8 +5,9 @@ use crate::Code;
 
 
 pub struct IRInst<'lex>{
+	pub name: &'lex str,
 	exe:&'lex UnsafeCell<Code>,
-	sig:&'lex [SigItem<'lex>]
+	sig:&'lex [SigItem<'lex>],
 }
 
 impl From<IRInst<'_>> for *const Code{

@@ -2,6 +2,8 @@
 #![allow(clippy::needless_lifetimes)]
 
 
+use core::ops::IndexMut;
+use core::ops::Index;
 use core::slice::from_raw_parts_mut;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
@@ -341,6 +343,62 @@ impl<'mem, T> StackRef<'mem, T> {
 }
 /*──────────────────── iterator ─────────────────────────*/
 impl<T> Iterator for StackRef<'_, T> { type Item = T; fn next(&mut self) -> Option<T> { self.pop() } }
+
+impl<T> Index<usize> for StackRef<'_, T>{
+type Output = T;
+fn index<'a>(&'a self, id: usize) -> &'a T{
+    if self.len() <= id {
+        panic!("out of bound index");
+    }
+    unsafe{&*self.above.sub(1+id)}
+}
+}
+
+impl<T> IndexMut<usize> for StackRef<'_, T>{
+fn index_mut<'a>(&'a mut self, id: usize) -> &'a mut T{
+    if self.len() <= id {
+        panic!("out of bound index");
+    }
+    unsafe{&mut *self.above.sub(1+id)}
+}
+}
+
+#[test]
+fn test_index_and_index_mut_basic() {
+    let mut storage = make_storage::<u32, 4>();
+    let mut stack = StackRef::from_slice(&mut storage);
+
+    for v in 1..=3 { stack.push(v).unwrap(); }   // 1 oldest … 3 newest
+
+    // Read through Index
+    assert_eq!(stack[0], 1);
+    assert_eq!(stack[1], 2);
+    assert_eq!(stack[2], 3);
+
+    // Mutate the middle element
+    stack[1] = 42;
+    // Pop order is still newest-first
+    assert_eq!(stack.pop(), Some(3));
+    assert_eq!(stack.pop(), Some(42));
+    assert_eq!(stack.pop(), Some(1));
+    assert!(stack.pop().is_none());
+}
+
+#[test]
+#[cfg(feature = "std")]   
+fn test_index_out_of_bounds_panics() {
+    use std::panic;
+
+    let mut storage = make_storage::<u8, 2>();
+    let mut stack = StackRef::from_slice(&mut storage);
+    stack.push(10).unwrap();      // len = 1
+
+    // Accessing idx 1 should panic
+    let result = panic::catch_unwind(|| {
+        let _ = stack[1];
+    });
+    assert!(result.is_err());
+}
 
 
 #[test]

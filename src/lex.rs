@@ -1,3 +1,4 @@
+use crate::types::TypeId;
 use crate::PalHash;
 use crate::types::TypeInner;
 use crate::Code;
@@ -10,8 +11,10 @@ use crate::stack::StackRef;
 pub struct Lex<'lex>{
 	pub code_mem:StackRef<'lex,Code>,
 	pub data_mem:StackAlloc<'lex>,
+	
+	pub gen_mem:StackAlloc<'lex>,
 	pub types_mem:StackRef<'lex,Type<'lex>>,
-	pub type_map:PalHash<&'lex TypeInner<'lex>,&'lex Type<'lex>>,
+	pub type_map:PalHash<&'lex TypeInner,PalTypeId>,
 }
 
 //========= STACK ALLOC=============

@@ -44,7 +44,6 @@ impl AccessMode {
     }
 }
 
-
 pub enum SigError<'lex> {
     WrongType { found: &'lex Type<'lex>, wanted: &'lex Type<'lex> },
     NeedsUnique,
@@ -111,51 +110,20 @@ impl fmt::Debug for SigError<'_> {
 
 #[derive(Debug)]
 pub struct Type<'lex>{
-    pub inner:TypeInner<'lex>,
-
-    pub size:usize,
+    pub inner:TypeInner,
+    pub size:i32,
+    pub cells:i32,
     pub name:&'lex str,
 }
 
-#[derive(Debug,Eq,Hash)]
-pub enum TypeInner<'lex>{
+pub type PalTypeId = u32;
+
+#[derive(Debug,Eq,Hash,PartialEq)]
+pub enum TypeInner{
     Basic,
-    Alias(&'lex TypeInner<'lex>),
-    Array(&'lex TypeInner<'lex>),
-    Tuple(&'lex [TypeInner<'lex>]),
-}
-
-impl PartialEq for TypeInner<'_>{
-
-fn eq(&self, other: &TypeInner<'_>) -> bool {
-    use TypeInner::*;
-    match (self,other){
-        (Basic,Basic) => true,
-        (Alias(a),Alias(b))=> {
-            if a as *const _ == b as *const _ {
-                true
-            }else{
-                a==b
-            }
-        },
-        (Array(a),Array(b))=> {
-            if a as *const _ == b as *const _ {
-                true
-            }else{
-                a==b
-            }
-        },
-        (Tuple(a),Tuple(b))=> {
-            if a as *const _ == b as *const _ {
-                true
-            }else{
-                a==b
-            }
-        },
-
-        _=>false,
-    }
-}
+    Alias(PalTypeId),
+    Array(PalTypeId),
+    Tuple(PalTypeId),
 }
 
 // pub fn get_tp<'lex>(lex:&mut Lex<'lex>,t:TypeInner<'lex>)-> &'lex Type<'lex>{
@@ -203,7 +171,7 @@ impl fmt::Display for SigItem<'_> {
 
 
 #[derive(Debug)]
-pub struct BoxVar<'lex> {
+pub struct CompVar<'lex> {
     pub tp: &'lex Type<'lex>,
     pub offset_from_start: i32, // first local is 0
     pub num_borrowed: i32,      // unique borrow is -1
@@ -242,7 +210,7 @@ fn check_subset(have: RwT, sig: RwT) -> Result<(),SigError<'static>> {
     }
 }
 
-pub fn use_box_as<'lex>(box_var: &mut BoxVar<'lex>, sig: &SigItem<'lex>) -> Result<(),SigError<'lex>> {
+pub fn use_box_as<'lex>(box_var: &mut CompVar<'lex>, sig: &SigItem<'lex>) -> Result<(),SigError<'lex>> {
     if box_var.tp as *const _ !=sig.tp as *const _{
         return Err(SigError::WrongType { found:box_var.tp, wanted:sig.tp})
     }
@@ -264,7 +232,7 @@ pub fn use_box_as<'lex>(box_var: &mut BoxVar<'lex>, sig: &SigItem<'lex>) -> Resu
     Ok(())
 }
 
-pub fn free_box_use(box_var: &mut BoxVar, sig: RwT) {
+pub fn free_box_use(box_var: &mut CompVar, sig: RwT) {
     if sig & UNIQUE_FLAG != 0 {
         box_var.num_borrowed = 0;
     } else {
@@ -279,21 +247,21 @@ pub fn free_box_use(box_var: &mut BoxVar, sig: RwT) {
 /// # Safety
 /// changing any of the underlying stacks is considered unsound
 pub struct SigStack<'me, 'lex>{
-    size_locals:i32,
-    arena:StackAllocator<'me,RefCell<BoxVar<'lex>>>,
-    stack:StackRef<'me,&'me RefCell<BoxVar<'lex>>>,
+    cells_locals:i32,
+    arena:StackAllocator<'me,RefCell<CompVar<'lex>>>,
+    pub stack:StackRef<'me,&'me RefCell<CompVar<'lex>>>,
 }
 
 impl<'me, 'lex> SigStack<'me, 'lex>{
-    pub fn add_local(&mut self,tp:&'lex Type<'lex>)->&'me RefCell<BoxVar<'lex>>{
-        let var = BoxVar{
+    pub fn add_local(&mut self,tp:&'lex Type<'lex>)->&'me RefCell<CompVar<'lex>>{
+        let var = CompVar{
             tp,
             permissions:READ_FLAG&WRITE_FLAG&UNIQUE_FLAG,
             num_borrowed:0,
-            offset_from_start:self.size_locals,
+            offset_from_start:self.cells_locals,
         };
         let ans = self.arena.save(var.into()).expect("underflow local stack");
-        self.size_locals+=1;
+        self.cells_locals+=tp.cells;
         ans
     }
 
