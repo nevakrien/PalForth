@@ -5,6 +5,8 @@ use hashbrown::HashMap;
 use crate::vm::Code;
 
 pub mod stack;
+pub mod make_stack;
+
 pub mod buildins;
 pub mod vm;
 pub mod lex;

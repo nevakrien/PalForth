@@ -9,6 +9,11 @@ unchecked_underflow = []         # Enables unchecked pop/spot
 unchecked_overflow = []          # Enables unchecked push
 std = []
 trace_vm=["std"]
+flaky_tests=[]
 
 [dependencies]
 hashbrown = { version = "0.15.4", default-features = false,features=["default-hasher"] }
+libc = "0.2.174"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["memoryapi", "winnt"] }

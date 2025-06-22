@@ -1,6 +1,7 @@
+use std::fmt::Write;
+use crate::lex::StackWriter;
 use core::cell::RefCell;
 use crate::lex::StackAllocator;
-use core::cell::UnsafeCell;
 use crate::stack::StackRef;
 use crate::lex::Lex;
 use core::fmt;
@@ -60,11 +61,11 @@ impl fmt::Display for SigError<'_> {
             }
             SigError::NeedsUnique => write!(
                 f,
-                "Cannot borrow mutably: value is already borrowed (requires unique access)"
+                "Cannot borrow: value is already borrowed (requires unique access)"
             ),
             SigError::AlreadyBorrowed => write!(
                 f,
-                "Cannot borrow mutably: value is currently borrowed as unique"
+                "Cannot borrow: value is currently borrowed as unique"
             ),
             SigError::BasicSigError { clash, have } => {
 
@@ -110,7 +111,7 @@ impl fmt::Debug for SigError<'_> {
 
 #[derive(Debug)]
 pub struct Type<'lex>{
-    pub inner:TypeInner,
+    pub inner:TypeInner<'lex>,
     pub size:i32,
     pub cells:i32,
     pub name:&'lex str,
@@ -118,12 +119,60 @@ pub struct Type<'lex>{
 
 pub type PalTypeId = u32;
 
-#[derive(Debug,Eq,Hash,PartialEq)]
-pub enum TypeInner{
+#[derive(Debug,Clone,Copy,Eq,Hash,PartialEq)]
+pub enum TypeInner<'lex>{
     Basic,
-    Alias(PalTypeId),
-    Array(PalTypeId),
-    Tuple(PalTypeId),
+    Alias(PalTypeId,&'lex str),
+    Array(PalTypeId,Option<i32>),
+    Tuple(&'lex [PalTypeId]),
+}
+
+impl<'lex> TypeInner<'lex>{
+    pub fn get_type_id(&self,lex:&mut Lex<'lex>) -> PalTypeId{
+        if let Some(x) = lex.type_map.get(self) {
+            return *x;
+        }
+
+        let id = lex.types_mem.len().try_into().unwrap();
+
+
+        let (name,cells,size) = match self {
+            TypeInner::Basic => unreachable!("missing basic type in the table"),
+            TypeInner::Alias(parent,name)=>{
+                (*name,lex.types_mem[*parent as usize].cells,lex.types_mem[*parent as usize].size)
+            },
+            TypeInner::Array(elem,num) => {
+                let elem = &lex.types_mem[*elem as usize];
+                let mut writer = StackWriter::new(&mut lex.comp_data_mem);
+                match num{
+                    None => {
+                       write!(writer,"Array({})",elem.name).unwrap();
+                       let (cells,size) =(2,2*size_of::<*const ()>());
+                       (&*writer.finish(),cells as i32,size as i32)
+                    },
+                    Some(len) => {
+                        write!(writer,"Array<{}>({})",len,elem.name).unwrap();
+                        (&*writer.finish(),len*elem.cells,len*elem.size)
+                    }
+                }
+                // 
+
+            },
+            TypeInner::Tuple(elems) => {
+                let mut writer = StackWriter::new(&mut lex.comp_data_mem);
+                todo!()
+            }
+        };
+        lex.types_mem.save(Type{
+            inner:self.clone(),
+            name,
+            cells,
+            size,
+
+        }).unwrap();
+
+        id
+    }
 }
 
 // pub fn get_tp<'lex>(lex:&mut Lex<'lex>,t:TypeInner<'lex>)-> &'lex Type<'lex>{
