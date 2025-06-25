@@ -1,4 +1,6 @@
-use std::fmt::Write;
+use crate::lex::DelayedStr;
+use crate::lex::DelayedSlice;
+use core::fmt::Write;
 use crate::lex::StackWriter;
 use core::cell::RefCell;
 use crate::lex::StackAllocator;
@@ -114,7 +116,7 @@ pub struct Type<'lex>{
     pub inner:TypeInner<'lex>,
     pub size:i32,
     pub cells:i32,
-    pub name:&'lex str,
+    pub name:DelayedStr<'lex>,
 }
 
 pub type PalTypeId = u32;
@@ -124,7 +126,7 @@ pub enum TypeInner<'lex>{
     Basic,
     Alias(PalTypeId,&'lex str),
     Array(PalTypeId,Option<i32>),
-    Tuple(&'lex [PalTypeId]),
+    Cluster(DelayedSlice<'lex,PalTypeId>),
 }
 
 impl<'lex> TypeInner<'lex>{
@@ -158,12 +160,12 @@ impl<'lex> TypeInner<'lex>{
                 // 
 
             },
-            TypeInner::Tuple(elems) => {
+            TypeInner::Cluster(elems) => {
                 let mut writer = StackWriter::new(&mut lex.comp_data_mem);
                 todo!()
             }
         };
-        lex.types_mem.save(Type{
+        let me = lex.types_mem.save(Type{
             inner:self.clone(),
             name,
             cells,
@@ -171,6 +173,7 @@ impl<'lex> TypeInner<'lex>{
 
         }).unwrap();
 
+        lex.type_map.insert(&me.inner,id as PalTypeId).unwrap();
         id
     }
 }

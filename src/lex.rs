@@ -1,3 +1,8 @@
+use core::fmt::Formatter;
+use core::fmt::Display;
+use core::slice;
+use core::ops::Deref;
+use core::marker::PhantomData;
 use crate::stack::StackVec;
 use core::fmt;
 use core::fmt::Write;
@@ -9,7 +14,6 @@ use crate::types::TypeInner;
 use crate::Code;
 use crate::types::Type;
 use core::{mem::MaybeUninit};
-use crate::stack::StackRef;
 
 
 
@@ -18,203 +22,143 @@ pub struct Lex<'lex>{
 	pub data_mem:StackAlloc<'lex>,
 	
 	pub comp_data_mem:StackAlloc<'lex>,
-	pub types_mem:StackAllocator<'lex,Type<'lex>>,
+    pub types_mem:StackAllocator<'lex,Type<'lex>>,
 	pub type_map:PalHash<&'lex TypeInner<'lex>,PalTypeId>,
 }
 
-// //========= STACK ALLOC=============
 
-// pub struct StackAlloc<'a>(StackRef<'a, u8>);
+//----------------- DELAYED REF -------------------
+#[derive(Clone,Copy)]
+union OffsetPointer<T> {
+    offset:u32,
+    ptr:*const T,
+}
 
-// #[derive(Debug,Clone,Copy)]
-// pub struct StackAllocCheckPoint(*mut u8);
+#[derive(Debug,Clone,Copy)]
+pub struct DelayedRef<'a,T>{
+    inner:OffsetPointer<T>,
+    _ph:PhantomData<&'a T>
+}
 
-// impl<'lex> StackAlloc<'lex> {
-// 	#[inline]
-// 	pub fn new(s:StackRef<'lex, u8>)->Self{
-// 		StackAlloc(s)
-// 	}
+impl<T> Deref for DelayedRef<'_, T>{
+type Target = T;
+fn deref(&self) -> &T { unsafe{&*self.inner.ptr} }
+}
 
-// 	#[inline(always)]//we dont want 20 of these
-// 	pub fn alloc<T>(&mut self) -> Option<&'lex mut core::mem::MaybeUninit<T>> {
-// 		//this may seem like its unsound but StackRef holds the memory UNIQUELY
-// 		//for the duration of StackAlloc. so the only thing that can write to that memory is us
+impl<'a, T> From<&'a T> for DelayedRef<'a, T>{
 
-// 	    /* ── ZST handling ──────────────────────────────────────────── */
-// 	    if size_of::<T>() == 0 {
-// 	        // Return a pointer *inside* the arena (head), and leave the
-// 	        // bump pointer untouched so the test’s               a3 == a2
-// 	        // invariant holds.
-// 	        return Some(unsafe { &mut *(self.0.head as *mut MaybeUninit<T>) });
-// 	    }
+fn from(ptr: &'a T) -> Self { 
+    Self{
+        inner:OffsetPointer{ptr},
+        _ph:PhantomData
+    }
+}
+}
 
-// 	    /* ── constants for non-ZSTs ───────────────────────────────── */
-// 	    let size        = size_of::<T>();
-// 	    let align_mask  = align_of::<T>() - 1;          // power-of-two − 1
-// 	    let curr        = self.0.head as usize;         // byte above the free space
-// 	    let start       = (curr - size) & !align_mask;  // round *down* to align
-// 	    let total       = curr - start;                 // pad + size
+impl<T> DelayedRef<'_, T>{
+    pub unsafe fn new_offset(base:*const u8,ptr:&T)->Self{
+        let offset = unsafe { (ptr as *const T as *const u8).offset_from(base) } as u32;
+        Self{
+            inner:OffsetPointer{offset},
+            _ph:PhantomData
+        }
+    }
+    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
+        self.inner.ptr = base.add(self.inner.offset as usize) as *const T;
+    }}
+}
 
-// 	    let ptr = self.0.head.with_addr(start)  as *mut MaybeUninit<T>;
+#[derive(Clone,Copy)]
+union OffsetSlice<T> {
+    offsets:(u32,usize),//start len
+    ptr:*const [T],
+}
 
-// 	    /* ── delegate capacity check to the stack ─────────────────── */
-// 	    unsafe {
-// 	        self.0.alloc(total)?;                       // None ⇒ OOM
-// 	        Some(&mut*ptr)
-// 	    }
-// 	}
+#[derive(Debug,Clone,Copy)]
+pub struct DelayedSlice<'a,T>{
+    inner:OffsetSlice<T>,
+    _ph:PhantomData<&'a [T]>
+}
 
+impl<T> Deref for DelayedSlice<'_, T>{
+type Target = [T];
+fn deref(&self) -> &[T] { unsafe{&*self.inner.ptr} }
+}
 
-// 	#[inline]
-// 	pub fn check_point(&self)->StackAllocCheckPoint{
-// 		StackAllocCheckPoint(self.0.head)
-// 	}
+impl<T> Index<usize> for DelayedSlice<'_, T>{
 
-// 	/// # Safety
-// 	/// nothing points to memory we are currently freeing
-// 	#[inline]
-// 	pub unsafe fn goto_checkpoint(&mut self,check_point:StackAllocCheckPoint){
-// 		self.0.head=check_point.0;
-// 	}
+type Output = T;
+fn index(&self, id: usize) -> &T {(&*self)[id]}
+}
 
-// 	#[inline]
-// 	pub fn len(&self) -> usize{
-// 		self.0.len()
-// 	}
+impl<'a, T> From<&'a [T]> for DelayedSlice<'a, T>{
 
-// 	#[inline]
-// 	pub fn is_empty(&self) -> bool{
-// 		self.0.is_empty()
-// 	}
-// }
+fn from(ptr: &'a [T]) -> Self { 
+    Self{
+        inner:OffsetSlice{ptr},
+        _ph:PhantomData
+    }
+}
+}
 
-// //========= WRITING TO STACK ==============
-// //TODO make a stack allocator that grows up so we dont need to invert a string here
+impl<T> DelayedSlice<'_, T>{
+    pub unsafe fn new_offset(base:*const u8,slice:&[T])->Self{
+        let s = unsafe { (slice.as_ptr() as *const u8).offset_from(base) } as u32;
+        let offsets = (s,slice.len());
+        Self{
+            inner:OffsetSlice{offsets},
+            _ph:PhantomData
+        }
+    }
+    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
+        let start = base.add(self.inner.offsets.0 as usize) as *const T;
+        let len = self.inner.offsets.1;
 
-// use core::fmt::{self, Write};
-// use core::ptr::write;
+        self.inner.ptr = slice::from_raw_parts(start,len);
+    }}
+}
 
-// pub struct StackWriter<'me,'lex> {
-//     alloc: &'me mut StackAlloc<'lex>,
-//     start: *mut u8,
-// }
+#[derive(Debug,Clone,Copy)]
+pub struct DelayedStr<'a>(pub DelayedSlice<'a,u8>);
 
-// impl Write for StackWriter<'_,'_> {
-//     fn write_str(&mut self, s: &str) -> fmt::Result {
-//         for &b in s.as_bytes() {
-//             // Allocate 1 byte
-//             let slot = self.alloc.alloc::<u8>().ok_or(fmt::Error)?;
-//             unsafe { write(slot.as_mut_ptr(), b); }
-//         }
-//         Ok(())
-//     }
-// }
+impl Deref for DelayedStr<'_>{
+type Target = str;
+fn deref(&self) -> &str { unsafe{core::str::from_utf8_unchecked(&*self.0.inner.ptr)} }
+}
 
-// impl<'me,'lex> StackWriter<'me,'lex> {
-//     pub fn new(alloc: &'me mut StackAlloc<'lex>) -> Self {
-//         let start = alloc.0.head;
-//         StackWriter {
-//             alloc,
-//             start,
-//         }
-//     }
+impl<'a> From<&'a str> for DelayedStr<'a>{
 
-//     pub fn finish(self) -> &'lex mut str {unsafe{
-//     	let len = self.start.offset_from(self.alloc.0.head) as usize;
-//     	let slice = core::slice::from_raw_parts_mut(self.alloc.0.head, len);
-//     	slice.reverse();
-//         core::str::from_utf8_unchecked_mut(slice)
-//     }}
-// }
+fn from(s: &'a str) -> Self {Self(s.as_bytes().into()) }
+}
 
-// //========= TYPED STACK ALLOC =============
+impl DelayedStr<'_>{
+    pub unsafe fn new_offset(base:*const u8,s:&str)->Self{unsafe{
+        Self(DelayedSlice::new_offset(base,s.as_bytes()))
+    }}
+    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
+        self.0.offset_from(base)
+    }}
+}
 
-// /// An arena-style bump allocator that grows **downward** and hands out
-// /// `&'arena mut MaybeUninit<T>` for a *single, concrete* `T`.
-// ///
-// /// Compared with the untyped `StackAlloc<'a, u8>`:
-// /// * no alignment math – the backing slice is `[MaybeUninit<T>]`
-// /// * “size” is counted in *elements*, not bytes
-// /// * still handles ZSTs without moving the head
-// pub struct StackAllocator<'a, T>(StackRef<'a, T>);
+impl Display for DelayedStr<'_>{
 
-// #[derive(Debug, Clone, Copy)]
-// pub struct StackAllocatorCheckPoint<T>(*mut T);
-
-// impl<T> Drop for StackAllocator<'_, T>{
-
-// fn drop(&mut self) {
-// 	while self.0.pop().is_some(){
-
-// 	}
-// }
-// }
-
-// impl<'a, T> StackAllocator<'a, T> {
-//     #[inline]
-//     pub fn new(storage: &'a mut [MaybeUninit<T>]) -> Self {
-//         Self(StackRef::from_slice(storage))
-//     }
-
-//     #[inline]
-//     pub fn save(&mut self,elem:T)->Result<&'a mut T,T>{
-//     	if size_of::<T>() == 0 {
-//             return Ok(unsafe {&mut* core::ptr::dangling_mut()});
-//         }
-
-//     	unsafe{
-//     		match self.0.alloc(1){
-//     			None=>Err(elem),
-//     			Some(_)=>{
-//     				let mem = self.0.spot_raw(0).unwrap_unchecked();
-//     				mem.write(elem);
-//     				Ok(&mut*mem)
-//     			}
-//     		}
-//     	}
-//     }
-
-//     /// A snapshot of the current bump pointer.
-//     #[inline]
-//     pub fn check_point(&self) -> StackAllocatorCheckPoint<T> {
-//         StackAllocatorCheckPoint(self.0.head)
-//     }
-
-//     /// # Safety
-//     /// Caller must guarantee that *nothing* still points inside the region that
-//     /// is being rolled back (identical to the byte allocator’s contract).
-//     #[inline]
-//     pub unsafe fn goto_checkpoint(&mut self, cp: StackAllocatorCheckPoint<T>) { unsafe {
-//     	while self.0.head!=cp.0{
-//     		let _ = self.0.pop().unwrap_unchecked();
-//     	}
-//     }}
-
-//     #[inline]
-// 	pub fn len(&self) -> usize{
-// 		self.0.len()
-// 	}
-
-// 	#[inline]
-// 	pub fn is_empty(&self) -> bool{
-// 		self.0.is_empty()
-// 	}
-// }
-
-// impl<T> Index<usize> for StackAllocator<'_, T>{
-
-// type Output = T;
-// fn index(&self, idx: usize) -> &T { &self.0[idx] }
-// }
-
-// impl<T> IndexMut<usize> for StackAllocator<'_, T>{
-
-// fn index_mut(&mut self, idx: usize) -> &mut T { &mut self.0[idx] }
-// }
+fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+     fmt.write_str(&*self)
+}
+}
 
 
+#[test]
+fn test_string_delayed(){
+    let base = "---hello world"; 
+    let s = base.trim_start_matches('-');
 
+    let mut delayed = unsafe{DelayedStr::new_offset(base.as_ptr(),s)};
+    unsafe{delayed.offset_from(base.as_ptr());}
 
+    assert_eq!(s,&*delayed)
+
+}
 
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
 pub struct StackAlloc<'a>(StackVec<'a, u8>);
@@ -416,57 +360,6 @@ use super::*;
         }
         assert!(arena.alloc::<u64>().is_none(), "OOM must remain OOM");
     }
-
-    // #[test]
-    // fn stack_alloc_aligment() {
-    //     // 1 KiB is plenty for the test; adjust if your arena requires more.
-    //     let mut backing: [_; 1024] = make_storage();
-    //     // Safety: we hand the arena exclusive access to `backing`.
-    //     let mut arena =StackAlloc::from_slice(&mut backing);
-
-    //     /* ── plain u16 (align = 2) ─────────────────────────────────── */
-    //     let s1 = arena.alloc::<u16>().expect("u16 should fit");
-    //     let a1 = addr_of(s1);
-    //     assert_eq!(a1 % align_of::<u16>(), 0, "u16 not aligned");
-
-    //     /* ── overalligned tiny struct (align = 32 > payload) ───────── */
-    //     let s2 = arena.alloc::<OverAligned>().expect("OverAligned");
-    //     let a2 = addr_of(s2);
-    //     assert_eq!(a2 % align_of::<OverAligned>(), 0, "OverAligned mis-aligned");
-
-    //     *s2=MaybeUninit::new(OverAligned(2));
-    //     unsafe{
-    //     	assert_eq!(s2.assume_init(),OverAligned(2))
-
-    //     }
-
-    //     /* ── zero-sized type (size = 0, align = 1) ─────────────────── */
-    //     let s3 = arena.alloc::<Zst>().expect("ZST");
-    //     *s3 = MaybeUninit::new(Zst);
-
-    //     let a3 = addr_of(s3);
-    //     assert_eq!(a3 % align_of::<()>(), 0);
-    //     // ZST must not consume space, so address should equal the last head.
-    //     assert_eq!(a3, a2, "ZST should not move head");
-
-    //     /* ── an array with odd size/alignment interplay ────────────── */
-    //     let s4 = arena.alloc::<[u64; 3]>().expect("[u64;3]");
-    //     let a4 = addr_of(s4);
-    //     assert_eq!(a4 % align_of::<[u64; 3]>(), 0, "array mis-aligned");
-    //     assert!(a4 < a2, "arena still grows downward");
-
-    //     /* ── sanity: nothing overlapped and order is monotone ──────── */
-    //     assert!(a1 > a2 && a2 >= a3 && a3 > a4);
-
-    //     /* ── near-exhaustion check: fill what’s left in 8-byte chunks ─ */
-    //     loop {
-    //         match arena.alloc::<u64>() {
-    //             Some(_) => continue,
-    //             None => break, // expected out-of-memory
-    //         }
-    //     }
-    //     assert!(arena.alloc::<u64>().is_none(), "OOM must remain OOM");
-    // }
 
     #[test]
 	fn stack_writer_write_and_finish() {

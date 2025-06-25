@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["std"]                     # No features enabled by default
+default = []                     # No features enabled by default
 unchecked_underflow = []         # Enables unchecked pop/spot
 unchecked_overflow = []          # Enables unchecked push
 std = []
@@ -17,3 +17,6 @@ libc = "0.2.174"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["memoryapi", "winnt"] }
+
+[profile.release]
+panic = "abort"
