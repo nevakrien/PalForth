@@ -1,3 +1,4 @@
+use crate::lex::DelayedRef;
 use crate::lex::DelayedStr;
 use crate::lex::DelayedSlice;
 use core::fmt::Write;
@@ -111,7 +112,10 @@ impl fmt::Debug for SigError<'_> {
     }
 }
 
-#[derive(Debug)]
+/// these should be explicitly in types_mem
+pub type TypeP<'lex> = DelayedRef<'lex,Type<'lex>>;
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
 pub struct Type<'lex>{
     pub inner:TypeInner<'lex>,
     pub size:i32,
@@ -119,32 +123,27 @@ pub struct Type<'lex>{
     pub name:DelayedStr<'lex>,
 }
 
-pub type PalTypeId = u32;
 
 #[derive(Debug,Clone,Copy,Eq,Hash,PartialEq)]
 pub enum TypeInner<'lex>{
     Basic,
-    Alias(PalTypeId,&'lex str),
-    Array(PalTypeId,Option<i32>),
-    Cluster(DelayedSlice<'lex,PalTypeId>),
+    Alias(TypeP<'lex>,&'lex str),
+    Array(TypeP<'lex>,Option<i32>),
+    Cluster(DelayedSlice<'lex,TypeP<'lex>>),
 }
 
 impl<'lex> TypeInner<'lex>{
-    pub fn get_type_id(&self,lex:&mut Lex<'lex>) -> PalTypeId{
+    pub fn get_type_ref(&self,lex:&mut Lex<'lex>) -> TypeP<'lex>{
         if let Some(x) = lex.type_map.get(self) {
             return *x;
         }
 
-        let id = lex.types_mem.len().try_into().unwrap();
-
-
         let (name,cells,size) = match self {
             TypeInner::Basic => unreachable!("missing basic type in the table"),
             TypeInner::Alias(parent,name)=>{
-                (*name,lex.types_mem[*parent as usize].cells,lex.types_mem[*parent as usize].size)
+                (*name,parent.cells,parent.size)
             },
             TypeInner::Array(elem,num) => {
-                let elem = &lex.types_mem[*elem as usize];
                 let mut writer = StackWriter::new(&mut lex.comp_data_mem);
                 match num{
                     None => {
@@ -165,16 +164,16 @@ impl<'lex> TypeInner<'lex>{
                 todo!()
             }
         };
-        let me = lex.types_mem.save(Type{
+        let me : &'lex Type<'lex>= lex.types_mem.save(Type{
             inner:self.clone(),
-            name,
+            name: name.into(),
             cells,
             size,
 
-        }).unwrap();
+        }).unwrap() as &Type;
 
-        lex.type_map.insert(&me.inner,id as PalTypeId).unwrap();
-        id
+        lex.type_map.insert(&me.inner,me.into()).unwrap();
+        me.into()
     }
 }
 

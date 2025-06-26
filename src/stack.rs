@@ -2,7 +2,7 @@
 #![allow(clippy::needless_lifetimes)]
 
 
-use std::fmt::Write;
+use core::fmt::Write;
 use core::ops::IndexMut;
 use core::ops::Index;
 use core::slice::from_raw_parts_mut;
@@ -934,8 +934,8 @@ impl<T> Drop for StackVec<'_, T> {
 
 impl Write for StackVec<'_,u8>{
 
-fn write_str(&mut self, s: &str) -> Result<(), std::fmt::Error> {
-    self.push_slice(s.as_bytes()).ok_or(std::fmt::Error)
+fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+    self.push_slice(s.as_bytes()).ok_or(core::fmt::Error)
 }
 }
 
