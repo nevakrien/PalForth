@@ -168,7 +168,7 @@ impl<'lex> TypeInner<'lex>{
                 let mut writer = StackWriter::new(&mut lex.comp_data_mem);
                 let mut cells = 0;
                 let mut size = 0;
-                write!(writer, "(").expect("Out of memory in comp data");
+                write!(writer, "Cluster(").expect("Out of memory in comp data");
                 for (i, elem) in elems.iter().enumerate() {
                     cells += elem.cells;
                     size += elem.size;
@@ -401,7 +401,7 @@ impl<'me, 'lex,const STACK_SIZE: usize> SigStackEasyMemory<'me, 'lex, STACK_SIZE
 
 /* ───────────────────────── SIGSTACK TYPECHECK ───────────────────────── */
 
-
+#[cfg(test)]
 fn make_types() -> (Type<'static>, Type<'static>) {
     (
         Type { inner: TypeInner::Basic, size: 4, cells: 1, name: "int" },

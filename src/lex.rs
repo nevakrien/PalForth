@@ -1,4 +1,4 @@
-use crate::types::SigItem;
+use crate::ir::Word;
 use crate::types::TypeP;
 use core::hash::Hasher;
 use core::hash::Hash;
@@ -31,9 +31,7 @@ pub struct Lex<'lex>{
     pub words:PalHash<&'lex str,Word<'lex>>,
 }
 
-pub struct Word<'lex>{
-    input_sig:&'lex [SigItem<'lex>]
-}
+
 
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
 pub struct StackAlloc<'a>(StackVec<'a, u8>);
