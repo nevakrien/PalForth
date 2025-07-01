@@ -28,182 +28,6 @@ pub struct Lex<'lex>{
 	pub type_map:PalHash<&'lex TypeInner<'lex>,TypeP<'lex>>,
 }
 
-
-//----------------- DELAYED REF -------------------
-
-#[derive(Debug,Clone,Copy,Eq)]
-pub struct DelayedRef<'a,T>{
-    inner:*const T,
-    _ph:PhantomData<&'a T>
-}
-
-impl<T> Deref for DelayedRef<'_, T>{
-type Target = T;
-fn deref(&self) -> &T { unsafe{&*self.inner} }
-}
-
-impl<'a, T> From<&'a T> for DelayedRef<'a, T>{
-fn from(inner: &'a T) -> Self { 
-    Self{
-        inner,
-        _ph:PhantomData
-    }
-}
-}
-impl<'a, T> From<&'a mut T> for DelayedRef<'a, T>{
-fn from(inner: &'a mut T) -> Self { 
-    Self{
-        inner,
-        _ph:PhantomData
-    }
-}
-}
-
-
-impl<T> PartialEq for DelayedRef<'_, T> where T:PartialEq{
-fn eq(&self, other: &DelayedRef<'_, T>) -> bool {
-    let a : &T = &*self;
-    let b : &T= &*other;
-    a==b
-}
-}
-
-impl<T> Hash for DelayedRef<'_, T> where T:Hash{
-fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-    let a : &T = &*self;
-    a.hash(hasher)
-}
-}
-
-impl<T> DelayedRef<'_, T>{
-    pub unsafe fn new_offset(base:*const u8,ptr:&T)->Self{
-        let offset = unsafe { (ptr as *const T as *const u8).offset_from(base) };
-        Self{
-            inner:offset as *const T,
-            _ph:PhantomData
-        }
-    }
-    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
-        self.inner = base.add(self.inner as usize) as *const T;
-    }}
-}
-
-
-
-#[derive(Debug,Clone,Copy,Eq)]
-pub struct DelayedSlice<'a,T>{
-    ptr:*const T,
-    len:usize,
-    _ph:PhantomData<&'a [T]>
-}
-
-impl<T> PartialEq for DelayedSlice<'_, T> where T:PartialEq{
-fn eq(&self, other: &DelayedSlice<'_, T>) -> bool {
-    let a : &[T] = &*self;
-    let b : &[T]= &*other;
-    a==b
-}
-}
-
-impl<T> Hash for DelayedSlice<'_, T> where T:Hash{
-fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-    let a : &[T] = &*self;
-    a.hash(hasher)
-}
-}
-
-impl<T> Deref for DelayedSlice<'_, T>{
-type Target = [T];
-fn deref(&self) -> &[T] { unsafe{slice::from_raw_parts(self.ptr,self.len)} }
-}
-
-impl<T> Index<usize> for DelayedSlice<'_, T>{
-
-type Output = T;
-fn index(&self, id: usize) -> &T {
-    let s :&[T] = &*self;
-    &s[id]
-}
-}
-
-impl<'a, T> From<&'a [T]> for DelayedSlice<'a, T>{
-
-fn from(slice: &'a [T]) -> Self { 
-    Self{
-        ptr:slice.as_ptr(),
-        len:slice.len(),
-        _ph:PhantomData
-    }
-}
-}
-
-impl<'a, T> From<&'a mut [T]> for DelayedSlice<'a, T>{
-
-fn from(slice: &'a mut [T]) -> Self { 
-    Self{
-        ptr:slice.as_ptr(),
-        len:slice.len(),
-        _ph:PhantomData
-    }
-}
-}
-
-impl<T> DelayedSlice<'_, T>{
-    pub unsafe fn new_offset(base:*const u8,slice:&[T])->Self{
-        let s = unsafe { (slice.as_ptr() as *const u8).offset_from(base) };
-        Self{
-            ptr: s as *const T,
-            len:slice.len(),
-            _ph:PhantomData
-        }
-    }
-    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
-        self.ptr = base.add(self.ptr.addr()) as *const T;
-    }}
-}
-
-#[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
-pub struct DelayedStr<'a>(pub DelayedSlice<'a,u8>);
-
-impl Deref for DelayedStr<'_>{
-type Target = str;
-fn deref(&self) -> &str { unsafe{core::str::from_utf8_unchecked(&*self.0)} }
-}
-
-impl<'a> From<&'a str> for DelayedStr<'a>{
-
-fn from(s: &'a str) -> Self {Self(s.as_bytes().into()) }
-}
-
-impl DelayedStr<'_>{
-    pub unsafe fn new_offset(base:*const u8,s:&str)->Self{unsafe{
-        Self(DelayedSlice::new_offset(base,s.as_bytes()))
-    }}
-    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
-        self.0.offset_from(base)
-    }}
-}
-
-impl Display for DelayedStr<'_>{
-
-fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-     fmt.write_str(&*self)
-}
-}
-
-
-#[test]
-fn test_string_delayed(){
-    let base = "---hello world"; 
-    let s = base.trim_start_matches('-');
-
-    let mut delayed = unsafe{DelayedStr::new_offset(base.as_ptr(),s)};
-    unsafe{delayed.offset_from(base.as_ptr());}
-
-    assert_eq!(s,&*delayed)
-
-}
-
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
 pub struct StackAlloc<'a>(StackVec<'a, u8>);
 
@@ -455,4 +279,179 @@ use super::*;
 	    let d = alloc.save(Box::new(99)).unwrap();
 	    assert_eq!(*d, Box::new(99));
 	}
+}
+
+//----------------- DELAYED REF -------------------
+
+#[derive(Debug,Clone,Copy,Eq)]
+pub struct DelayedRef<'a,T>{
+    inner:*const T,
+    _ph:PhantomData<&'a T>
+}
+
+impl<T> Deref for DelayedRef<'_, T>{
+type Target = T;
+fn deref(&self) -> &T { unsafe{&*self.inner} }
+}
+
+impl<'a, T> From<&'a T> for DelayedRef<'a, T>{
+fn from(inner: &'a T) -> Self { 
+    Self{
+        inner,
+        _ph:PhantomData
+    }
+}
+}
+impl<'a, T> From<&'a mut T> for DelayedRef<'a, T>{
+fn from(inner: &'a mut T) -> Self { 
+    Self{
+        inner,
+        _ph:PhantomData
+    }
+}
+}
+
+
+impl<T> PartialEq for DelayedRef<'_, T> where T:PartialEq{
+fn eq(&self, other: &DelayedRef<'_, T>) -> bool {
+    let a : &T = &*self;
+    let b : &T= &*other;
+    a==b
+}
+}
+
+impl<T> Hash for DelayedRef<'_, T> where T:Hash{
+fn hash<H>(&self, hasher: &mut H) where H: Hasher {
+    let a : &T = &*self;
+    a.hash(hasher)
+}
+}
+
+impl<T> DelayedRef<'_, T>{
+    pub unsafe fn new_offset(base:*const u8,ptr:&T)->Self{
+        let offset = unsafe { (ptr as *const T as *const u8).offset_from(base) };
+        Self{
+            inner:offset as *const T,
+            _ph:PhantomData
+        }
+    }
+    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
+        self.inner = base.add(self.inner as usize) as *const T;
+    }}
+}
+
+
+
+#[derive(Debug,Clone,Copy,Eq)]
+pub struct DelayedSlice<'a,T>{
+    ptr:*const T,
+    len:usize,
+    _ph:PhantomData<&'a [T]>
+}
+
+impl<T> PartialEq for DelayedSlice<'_, T> where T:PartialEq{
+fn eq(&self, other: &DelayedSlice<'_, T>) -> bool {
+    let a : &[T] = &*self;
+    let b : &[T]= &*other;
+    a==b
+}
+}
+
+impl<T> Hash for DelayedSlice<'_, T> where T:Hash{
+fn hash<H>(&self, hasher: &mut H) where H: Hasher {
+    let a : &[T] = &*self;
+    a.hash(hasher)
+}
+}
+
+impl<T> Deref for DelayedSlice<'_, T>{
+type Target = [T];
+fn deref(&self) -> &[T] { unsafe{slice::from_raw_parts(self.ptr,self.len)} }
+}
+
+impl<T> Index<usize> for DelayedSlice<'_, T>{
+
+type Output = T;
+fn index(&self, id: usize) -> &T {
+    let s :&[T] = &*self;
+    &s[id]
+}
+}
+
+impl<'a, T> From<&'a [T]> for DelayedSlice<'a, T>{
+
+fn from(slice: &'a [T]) -> Self { 
+    Self{
+        ptr:slice.as_ptr(),
+        len:slice.len(),
+        _ph:PhantomData
+    }
+}
+}
+
+impl<'a, T> From<&'a mut [T]> for DelayedSlice<'a, T>{
+
+fn from(slice: &'a mut [T]) -> Self { 
+    Self{
+        ptr:slice.as_ptr(),
+        len:slice.len(),
+        _ph:PhantomData
+    }
+}
+}
+
+impl<T> DelayedSlice<'_, T>{
+    pub unsafe fn new_offset(base:*const u8,slice:&[T])->Self{
+        let s = unsafe { (slice.as_ptr() as *const u8).offset_from(base) };
+        Self{
+            ptr: s as *const T,
+            len:slice.len(),
+            _ph:PhantomData
+        }
+    }
+    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
+        self.ptr = base.add(self.ptr.addr()) as *const T;
+    }}
+}
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
+pub struct DelayedStr<'a>(pub DelayedSlice<'a,u8>);
+
+impl Deref for DelayedStr<'_>{
+type Target = str;
+fn deref(&self) -> &str { unsafe{core::str::from_utf8_unchecked(&*self.0)} }
+}
+
+impl<'a> From<&'a str> for DelayedStr<'a>{
+
+fn from(s: &'a str) -> Self {Self(s.as_bytes().into()) }
+}
+
+impl DelayedStr<'_>{
+    pub unsafe fn new_offset(base:*const u8,s:&str)->Self{unsafe{
+        Self(DelayedSlice::new_offset(base,s.as_bytes()))
+    }}
+    pub unsafe fn offset_from(&mut self,base:*const u8){unsafe{
+        self.0.offset_from(base)
+    }}
+}
+
+impl Display for DelayedStr<'_>{
+
+fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+     fmt.write_str(&*self)
+}
+}
+
+
+#[test]
+fn test_string_delayed(){
+    let base = "---hello world"; 
+    let s = base.trim_start_matches('-');
+
+    let mut delayed = unsafe{DelayedStr::new_offset(base.as_ptr(),s)};
+    unsafe{delayed.offset_from(base.as_ptr());}
+
+    assert_eq!(s,&*delayed)
+
 }

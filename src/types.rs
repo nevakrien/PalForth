@@ -1,5 +1,3 @@
-use crate::lex::DelayedRef;
-use crate::lex::DelayedStr;
 use crate::lex::DelayedSlice;
 use core::fmt::Write;
 use crate::lex::StackWriter;
@@ -112,15 +110,14 @@ impl fmt::Debug for SigError<'_> {
     }
 }
 
-/// these should be explicitly in types_mem
-pub type TypeP<'lex> = DelayedRef<'lex,Type<'lex>>;
+pub type TypeP<'lex> = &'lex Type<'lex>;
 
 #[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
 pub struct Type<'lex>{
     pub inner:TypeInner<'lex>,
     pub size:i32,
     pub cells:i32,
-    pub name:DelayedStr<'lex>,
+    pub name:&'lex str,
 }
 
 
@@ -156,36 +153,38 @@ impl<'lex> TypeInner<'lex>{
                         (&*writer.finish(),len*elem.cells,len*elem.size)
                     }
                 }
-                // 
+                
 
             },
             TypeInner::Cluster(elems) => {
                 let mut writer = StackWriter::new(&mut lex.comp_data_mem);
-                todo!()
+                let mut cells = 0;
+                let mut size = 0;
+                write!(writer, "(").unwrap();
+                for (i, elem) in elems.iter().enumerate() {
+                    cells += elem.cells;
+                    size += elem.size;
+                    if i > 0 {
+                        write!(writer, ", ").unwrap();
+                    }
+                    write!(writer, "{}", elem.name).unwrap();
+                }
+                write!(writer, ")").unwrap();
+                (writer.finish() as &_, cells, size)
             }
         };
-        let me : &'lex Type<'lex>= lex.types_mem.save(Type{
+        let me= lex.types_mem.save(Type{
             inner:self.clone(),
             name: name.into(),
             cells,
             size,
 
-        }).unwrap() as &Type;
+        }).unwrap();
 
-        lex.type_map.insert(&me.inner,me.into()).unwrap();
-        me.into()
+        lex.type_map.insert(&me.inner,me).unwrap();
+        me
     }
 }
-
-// pub fn get_tp<'lex>(lex:&mut Lex<'lex>,t:TypeInner<'lex>)-> &'lex Type<'lex>{
-//     if let Some(x) = lex.type_map.get(&t){
-//         return x;
-//     }
-
-//     let v = Type{inner:k,name:}
-
-//     todo!()
-// }
 
 #[derive(Debug)]
 pub struct SigItem<'lex>{
