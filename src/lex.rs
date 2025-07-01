@@ -1,3 +1,4 @@
+use crate::types::SigItem;
 use crate::types::TypeP;
 use core::hash::Hasher;
 use core::hash::Hash;
@@ -26,6 +27,12 @@ pub struct Lex<'lex>{
 	pub comp_data_mem:StackAlloc<'lex>,
     pub types_mem:StackAllocator<'lex,Type<'lex>>,
 	pub type_map:PalHash<&'lex TypeInner<'lex>,TypeP<'lex>>,
+
+    pub words:PalHash<&'lex str,Word<'lex>>,
+}
+
+pub struct Word<'lex>{
+    input_sig:&'lex [SigItem<'lex>]
 }
 
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
@@ -68,7 +75,7 @@ impl<'lex> StackAlloc<'lex> {
     pub unsafe fn goto_checkpoint(&mut self, cp: StackAllocCheckPoint) {
         let to_free = self.0.len() - cp.0;
         // Everything here is plain bytes, so dropping isn’t required.
-        self.0.free(to_free).unwrap();
+        self.0.free(to_free).expect("checkpoint math is wrong");
     }
 
     #[inline] pub fn len(&self) -> usize       { self.0.len() }
@@ -145,7 +152,7 @@ impl<'a, T> StackAllocator<'a, T> {
     #[inline]
     pub unsafe fn goto_checkpoint(&mut self, cp: StackAllocatorCheckPoint) {
         let live = self.0.len() - cp.0;
-        self.0.flush(live).unwrap();   // drop each value
+        self.0.flush(live).expect("checkpoint math is wrong");   // drop each value
     }
 
     #[inline] pub fn len(&self) -> usize       { self.0.len() }

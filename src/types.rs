@@ -11,8 +11,8 @@ pub const READ_FLAG  : u8 = 0x1;
 pub const WRITE_FLAG : u8 = 0x2;
 pub const UNIQUE_FLAG: u8 = 0x4;
 pub const OUTPUT_FLAG: u8 = 0x8;//whethere or not this stays on the output stack
-pub const RAW_FLAG   : u8 = 0xA;//if set the value is passed on the data stack (this convention cant be easily automated)
-pub const INDEX_FLAG : u8 = 0xB;//only relvent for outputs if set the return pointer may be ANY pointer Derived!!! from the input (which has lifetime implications) this convention cant be easily automated
+pub const RAW_FLAG   : u8 = 0x10;//if set the value is passed on the data stack (this convention cant be easily automated)
+pub const INDEX_FLAG : u8 = 0x20;//only relvent for outputs if set the return pointer may be ANY pointer Derived!!! from the input (which has lifetime implications) this convention cant be easily automated
 pub type RwT = u8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +51,7 @@ pub enum SigError<'lex> {
     NeedsUnique,
     AlreadyBorrowed,
     BasicSigError { clash: RwT, have: RwT }, // cleaner and clearer
+    MissingArgument(SigItem<'lex>)
 }
 
 
@@ -83,7 +84,7 @@ impl fmt::Display for SigError<'_> {
                 }
                 if clash & OUTPUT_FLAG != 0  {
                     let actual   = if have  & OUTPUT_FLAG != 0 { "output" } else { "input" };
-                    let expected = if !have & OUTPUT_FLAG != 0 { "input" } else { "output" };
+                    let expected = if have & OUTPUT_FLAG != 0 { "input" } else { "output" };
                     writeln!(f, "  - expected {}, but got {}", expected, actual)?;
                 }
 
@@ -100,6 +101,10 @@ impl fmt::Display for SigError<'_> {
 
                 Ok(())
             },
+            SigError::MissingArgument(a) =>  write!(
+                f,
+                "Missing an argument of type {a}"
+            ),
         }
     }
 }
@@ -144,12 +149,12 @@ impl<'lex> TypeInner<'lex>{
                 let mut writer = StackWriter::new(&mut lex.comp_data_mem);
                 match num{
                     None => {
-                       write!(writer,"Array({})",elem.name).unwrap();
+                       write!(writer,"Array({})",elem.name).expect("Out of memory in comp data");
                        let (cells,size) =(2,2*size_of::<*const ()>());
                        (&*writer.finish(),cells as i32,size as i32)
                     },
                     Some(len) => {
-                        write!(writer,"Array<{}>({})",len,elem.name).unwrap();
+                        write!(writer,"Array<{}>({})",len,elem.name).expect("Out of memory in comp data");
                         (&*writer.finish(),len*elem.cells,len*elem.size)
                     }
                 }
@@ -160,16 +165,16 @@ impl<'lex> TypeInner<'lex>{
                 let mut writer = StackWriter::new(&mut lex.comp_data_mem);
                 let mut cells = 0;
                 let mut size = 0;
-                write!(writer, "(").unwrap();
+                write!(writer, "(").expect("Out of memory in comp data");
                 for (i, elem) in elems.iter().enumerate() {
                     cells += elem.cells;
                     size += elem.size;
                     if i > 0 {
-                        write!(writer, ", ").unwrap();
+                        write!(writer, ", ").expect("Out of memory in comp data");
                     }
-                    write!(writer, "{}", elem.name).unwrap();
+                    write!(writer, "{}", elem.name).expect("Out of memory in comp data");
                 }
-                write!(writer, ")").unwrap();
+                write!(writer, ")").expect("Out of memory in comp data");
                 (writer.finish() as &_, cells, size)
             }
         };
@@ -179,14 +184,25 @@ impl<'lex> TypeInner<'lex>{
             cells,
             size,
 
-        }).unwrap();
+        }).expect("Out of memory in types arena");
 
-        lex.type_map.insert(&me.inner,me).unwrap();
+        if lex.type_map.insert(&me.inner,me).is_some() {
+            //This should be unreachable because of the check at the start of the function
+            unreachable!();
+        }
         me
     }
 }
 
-#[derive(Debug)]
+/*──────────────────  SIGNATURES ────────────────── */
+//signatures are allways of this form
+//[outputs] [inputs]
+//
+//inputs are consumed out of the stack while outputs remain
+//in PALFORTH virtually all outputs are done by injection
+//meaning a pointer to the output spot is passed to the function the output is written to it and then it remains on the stack
+
+#[derive(Debug,Clone,Copy)]
 pub struct SigItem<'lex>{
     pub tp: &'lex Type<'lex>,
     pub permissions: RwT, 
@@ -290,10 +306,6 @@ pub fn free_box_use(box_var: &mut CompVar, sig: RwT) {
     }
 }
 
-// pub fn check_sig<'lex>(box_var: &mut StackRef<'a, Type>, sig: SigItem<'lex>) -> Result<(),SigError<'lex>>{
-
-// }
-
 /// # Safety
 /// changing any of the underlying stacks is considered unsound
 pub struct SigStack<'me, 'lex>{
@@ -315,13 +327,199 @@ impl<'me, 'lex> SigStack<'me, 'lex>{
         ans
     }
 
-    pub fn call_sig(&mut self,sig:&[SigItem<'lex>])->Result<(),SigError<'lex>>{
-        for t in sig.iter().rev(){
+    ///checks a signature and pops out the inputs from the argument stack
+    ///on faliure the stack is left in a weird but safe state
+    pub fn call_sig(&mut self,outputs:&[SigItem<'lex>],inputs:&[SigItem<'lex>])->Result<(),SigError<'lex>>{
+        for t in inputs.iter().rev(){
             match self.stack.pop(){
-                None=>todo!(),
+                None=>return Err(SigError::MissingArgument(*t)),
                 Some(b)=>use_box_as(&mut b.borrow_mut(),t)?,
             };
         }
+        
+        //checkpoint here so outputs arent poped
+        let mut stack = StackRef::new_full(self.stack.split().0);
+
+        for t in outputs.iter().rev(){
+            match stack.pop(){
+                None=>return Err(SigError::MissingArgument(*t)),
+                Some(b)=>use_box_as(&mut b.borrow_mut(),t)?,
+            };
+        }
+
         Ok(())
     }
+}
+
+/* ───────────────────────── SIGSTACK TYPECHECK ───────────────────────── */
+
+use crate::stack::make_storage;
+
+fn make_types() -> (Type<'static>, Type<'static>) {
+    (
+        Type { inner: TypeInner::Basic, size: 4, cells: 1, name: "int" },
+        Type { inner: TypeInner::Basic, size: 4, cells: 1, name: "float" },
+    )
+}
+
+#[test]
+fn sig_stack_success_case() {
+    let (type_int, type_float) = make_types();
+    let mut arena_mem = make_storage::<_, 1024>();
+    let mut stack_mem = make_storage::<_, 1024>();
+    let mut sig_stack = SigStack {
+        cells_locals: 0,
+        arena: StackAllocator::new(&mut arena_mem),
+        stack: StackRef::from_slice(&mut stack_mem),
+    };
+
+    let var1 = sig_stack.arena.save(RefCell::new(CompVar {
+        tp: &type_int,
+        offset_from_start: 0,
+        num_borrowed: 0,
+        permissions: READ_FLAG | WRITE_FLAG | UNIQUE_FLAG,
+    })).unwrap();
+    let var2 = sig_stack.arena.save(RefCell::new(CompVar {
+        tp: &type_float,
+        offset_from_start: 1,
+        num_borrowed: 0,
+        permissions: READ_FLAG,
+    })).unwrap();
+    sig_stack.stack.push(var1).unwrap();
+    sig_stack.stack.push(var2).unwrap();
+
+    let inputs = [
+        SigItem { tp: &type_int, permissions: READ_FLAG },
+        SigItem { tp: &type_float, permissions: READ_FLAG },
+    ];
+    sig_stack.call_sig(&[], &inputs).unwrap();
+    assert_eq!(sig_stack.stack.len(), 0);
+}
+
+#[test]
+fn sig_stack_wrong_type_error() {
+    let (type_int, type_float) = make_types();
+    let mut arena_mem = make_storage::<_, 1024>();
+    let mut stack_mem = make_storage::<_, 1024>();
+    let mut sig_stack = SigStack {
+        cells_locals: 0,
+        arena: StackAllocator::new(&mut arena_mem),
+        stack: StackRef::from_slice(&mut stack_mem),
+    };
+    let var1 = sig_stack.arena.save(RefCell::new(CompVar {
+        tp: &type_int,
+        offset_from_start: 0,
+        num_borrowed: 0,
+        permissions: READ_FLAG | WRITE_FLAG | UNIQUE_FLAG,
+    })).unwrap();
+    sig_stack.stack.push(var1).unwrap();
+
+    let inputs = [SigItem { tp: &type_float, permissions: READ_FLAG }];
+    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
+    match err {
+        SigError::WrongType { found, wanted } => {
+            assert_eq!(found.name, "int");
+            assert_eq!(wanted.name, "float");
+        },
+        _ => panic!("Expected WrongType error"),
+    }
+}
+
+#[test]
+fn sig_stack_missing_argument_error() {
+    let (type_int, _) = make_types();
+    let mut arena_mem = make_storage::<_, 1024>();
+    let mut stack_mem = make_storage::<_, 1024>();
+    let mut sig_stack = SigStack {
+        cells_locals: 0,
+        arena: StackAllocator::new(&mut arena_mem),
+        stack: StackRef::from_slice(&mut stack_mem),
+    };
+    let inputs = [SigItem { tp: &type_int, permissions: READ_FLAG }];
+    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
+    match err {
+        SigError::MissingArgument(item) => {
+            assert_eq!(item.tp.name, "int");
+        },
+        _ => panic!("Expected MissingArgument error"),
+    }
+}
+
+#[test]
+fn sig_stack_permission_error() {
+    let (type_int, _) = make_types();
+    let mut arena_mem = make_storage::<_, 1024>();
+    let mut stack_mem = make_storage::<_, 1024>();
+    let mut sig_stack = SigStack {
+        cells_locals: 0,
+        arena: StackAllocator::new(&mut arena_mem),
+        stack: StackRef::from_slice(&mut stack_mem),
+    };
+    let var1 = sig_stack.arena.save(RefCell::new(CompVar {
+        tp: &type_int,
+        offset_from_start: 0,
+        num_borrowed: 0,
+        permissions: READ_FLAG,
+    })).unwrap();
+    sig_stack.stack.push(var1).unwrap();
+
+    let inputs = [SigItem { tp: &type_int, permissions: WRITE_FLAG }];
+    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
+    match err {
+        SigError::BasicSigError { clash, have } => {
+            assert_ne!(clash & WRITE_FLAG, 0);
+            assert_eq!(have & WRITE_FLAG, 0);
+        },
+        _ => panic!("Expected BasicSigError for permissions"),
+    }
+}
+
+#[test]
+fn sig_stack_needs_unique_error() {
+    let (type_int, _) = make_types();
+    let mut arena_mem = make_storage::<_, 1024>();
+    let mut stack_mem = make_storage::<_, 1024>();
+    let mut sig_stack = SigStack {
+        cells_locals: 0,
+        arena: StackAllocator::new(&mut arena_mem),
+        stack: StackRef::from_slice(&mut stack_mem),
+    };
+    let var1 = sig_stack.arena.save(RefCell::new(CompVar {
+        tp: &type_int,
+        offset_from_start: 0,
+        num_borrowed: 1,
+        permissions: READ_FLAG | UNIQUE_FLAG,
+    })).unwrap();
+    sig_stack.stack.push(var1).unwrap();
+    sig_stack.stack.push(var1).unwrap();
+
+    let inputs = [
+      SigItem { tp: &type_int, permissions: UNIQUE_FLAG },
+      SigItem { tp: &type_int, permissions: UNIQUE_FLAG }
+    ];
+    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
+    assert!(matches!(err, SigError::NeedsUnique));
+}
+
+#[test]
+fn sig_stack_already_borrowed_error() {
+    let (type_int, _) = make_types();
+    let mut arena_mem = make_storage::<_, 1024>();
+    let mut stack_mem = make_storage::<_, 1024>();
+    let mut sig_stack = SigStack {
+        cells_locals: 0,
+        arena: StackAllocator::new(&mut arena_mem),
+        stack: StackRef::from_slice(&mut stack_mem),
+    };
+    let var1 = sig_stack.arena.save(RefCell::new(CompVar {
+        tp: &type_int,
+        offset_from_start: 0,
+        num_borrowed: -1,
+        permissions: READ_FLAG | UNIQUE_FLAG,
+    })).unwrap();
+    sig_stack.stack.push(var1).unwrap();
+
+    let inputs = [SigItem { tp: &type_int, permissions: READ_FLAG }];
+    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
+    assert!(matches!(err, SigError::AlreadyBorrowed));
 }

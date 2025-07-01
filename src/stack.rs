@@ -728,8 +728,8 @@ impl<'mem, T> StackVec<'mem, T> {
             _ph: PhantomData,
         }
     }
-
-    pub const fn new_full(buf: &'mem mut [T]) -> Self
+    
+    pub const unsafe fn new_full(buf: &'mem mut [T]) -> Self
     where
         T: Copy,
     {

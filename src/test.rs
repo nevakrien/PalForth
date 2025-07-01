@@ -396,3 +396,4 @@ fn call_dyn_executes_target() {
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
     }
 }
+
