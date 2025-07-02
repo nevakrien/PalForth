@@ -28,12 +28,12 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
         }
     }
 
-    pub fn simple_add_word(&mut self, word: &Word<'lex>) -> Result<(), SigError<'lex>> {
-        word.runtime.check_sig(&mut self.stack)?;
-        //add the word into the function
+    pub fn add_runtime_code(&mut self, runtime: &RuntimeCode<'lex>) -> Result<(), SigError<'lex>> {
+        runtime.check_sig(&mut self.stack)?;
+        //append the code in
         self.lex
             .code_mem
-            .save(Code::word_raw(word.runtime.exe.get()))
+            .save(runtime.code())
             .expect("out of code mem");
         Ok(())
     }
@@ -55,16 +55,37 @@ pub struct Word<'lex> {
     pub immidate: Option<&'lex UnsafeCell<Code>>,
 }
 
-pub struct RuntimeCode<'lex> {
-    exe: &'lex UnsafeCell<Code>,
-    pub input_sig: &'lex [SigItem<'lex>],
-    pub output_sig: &'lex [SigItem<'lex>],
+///a moveble peice of code that may or may not be inlined
+///for the most part inlined code should be reserved for buildins
+///inlining derived words can be good but it requires the JIT to do double work
+pub enum Exe<'lex>{
+	Inlined(Code),
+	Outlined(&'lex [Code])
 }
 
-impl From<RuntimeCode<'_>> for *const Code {
-    fn from(x: RuntimeCode<'_>) -> Self {
-        x.exe.get()
-    }
+impl<'lex> Clone for Exe<'lex>{
+fn clone(&self) -> Self {
+	match self{
+		Exe::Outlined(r)=>Exe::Outlined(r),
+		Exe::Inlined(code) => Exe::Inlined(code.shallow_clone()),
+	}
+}
+}
+
+impl Exe<'_>{
+	pub fn code(self)->Code{
+		match self{
+			Exe::Inlined(code)=>code,
+			Exe::Outlined(slice)=>Code::word(slice),
+		}
+	}
+}
+
+///an indirect refrence to code
+pub struct RuntimeCode<'lex> {
+    exe: Exe<'lex>,
+    pub input_sig: &'lex [SigItem<'lex>],
+    pub output_sig: &'lex [SigItem<'lex>],
 }
 
 impl<'lex> RuntimeCode<'lex> {
@@ -72,7 +93,11 @@ impl<'lex> RuntimeCode<'lex> {
     /// same as [`Vm::execute_code`]
     #[inline(always)]
     pub unsafe fn run(&self, vm: &mut Vm) {
-        unsafe { vm.execute_code(self.exe.get()) }
+        unsafe { vm.execute_code(&self.code()) }
+    }
+
+    pub fn code(&self) -> Code{
+    	self.exe.clone().code()
     }
 
     ///# Safety

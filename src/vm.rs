@@ -107,6 +107,14 @@ impl Code {
     pub fn is_null(&self) -> bool {
         self.f.load(Ordering::Relaxed).is_none() && self.param.load(Ordering::Relaxed).is_null()
     }
+
+    #[inline(always)]
+    pub fn shallow_clone(&self)->Self{
+    	match self.f.load(Ordering::Relaxed){
+    		Some(f)=>Code::basic_raw(f,self.param.load(Ordering::Relaxed)),
+    		None=>Code::word_raw(self.param.load(Ordering::Relaxed))
+    	}
+    }
 }
 
 pub struct VmEasyMemory<const STACK_SIZE: usize> {
