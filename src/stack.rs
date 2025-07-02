@@ -1,24 +1,21 @@
 //this module has a lot of raw pointers betterbe explicit
 #![allow(clippy::needless_lifetimes)]
 
-
 use core::fmt::Write;
-use core::ops::IndexMut;
-use core::ops::Index;
-use core::slice::from_raw_parts_mut;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
+use core::ops::Index;
+use core::ops::IndexMut;
 use core::ptr;
 use core::slice;
-
-
+use core::slice::from_raw_parts_mut;
 
 pub fn make_storage<T, const N: usize>() -> [MaybeUninit<T>; N] {
     // SAFETY: MaybeUninit is safe to use uninitialized.
     unsafe { MaybeUninit::uninit().assume_init() }
 }
 
-#[derive(Debug,Clone,Copy,PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StackCheckPoint<T>(*mut T);
 
 /*──────────────────── stack type ───────────────────────*/
@@ -37,10 +34,10 @@ pub struct StackCheckPoint<T>(*mut T);
 /// ```
 pub struct StackRef<'mem, T> {
     //the fact rust is missing const makes this make less effishent code than i would like...
-    pub(crate) above: *mut T,   // one-past the *highest* live element
-    pub(crate) head:  *mut T,   // next pop / current top (lowest live element)
-    pub(crate) end:   *mut T,   // lowest address in the backing buffer
-    pub(crate) _ph:   PhantomData<&'mem mut [MaybeUninit<T>]>,
+    pub(crate) above: *mut T, // one-past the *highest* live element
+    pub(crate) head: *mut T,  // next pop / current top (lowest live element)
+    pub(crate) end: *mut T,   // lowest address in the backing buffer
+    pub(crate) _ph: PhantomData<&'mem mut [MaybeUninit<T>]>,
 }
 
 unsafe impl<'m, T: Send> Send for StackRef<'m, T> {}
@@ -51,18 +48,27 @@ impl<'mem, T> StackRef<'mem, T> {
     /// Empty stack over an *uninitialised* slice.
     #[inline]
     pub const fn from_slice(buf: &'mem mut [MaybeUninit<T>]) -> Self {
-        let end   = buf.as_mut_ptr() as *mut T;       // low addr
-        let above = unsafe { end.add(buf.len()) };    // one-past high addr
-        Self { above, head: above, end, _ph: PhantomData }
+        let end = buf.as_mut_ptr() as *mut T; // low addr
+        let above = unsafe { end.add(buf.len()) }; // one-past high addr
+        Self {
+            above,
+            head: above,
+            end,
+            _ph: PhantomData,
+        }
     }
-
 
     /// Empty stack over an *uninitialised* slice.
     #[inline]
     pub const fn from_slice_raw(buf: *mut [MaybeUninit<T>]) -> Self {
-        let end   = buf as *mut T;       // low addr
-        let above = unsafe { end.add(buf.len()) };    // one-past high addr
-        Self { above, head: above, end, _ph: PhantomData }
+        let end = buf as *mut T; // low addr
+        let above = unsafe { end.add(buf.len()) }; // one-past high addr
+        Self {
+            above,
+            head: above,
+            end,
+            _ph: PhantomData,
+        }
     }
 
     /// Stack that is **full** (all elements initialised).
@@ -71,9 +77,14 @@ impl<'mem, T> StackRef<'mem, T> {
     where
         T: Copy,
     {
-        let end   = buf.as_mut_ptr();                 // low addr
-        let above = unsafe { end.add(buf.len()) };    // one-past high addr
-        Self { above, head: end, end, _ph: PhantomData }
+        let end = buf.as_mut_ptr(); // low addr
+        let above = unsafe { end.add(buf.len()) }; // one-past high addr
+        Self {
+            above,
+            head: end,
+            end,
+            _ph: PhantomData,
+        }
     }
 
     /// Convert back to the original uninitialised slice.
@@ -85,7 +96,7 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
-/*──────────────────── invariants ───────────────────────*/
+    /*──────────────────── invariants ───────────────────────*/
     /// Number of live elements.
     #[inline]
     pub fn write_index(&self) -> usize {
@@ -103,9 +114,11 @@ impl<'mem, T> StackRef<'mem, T> {
     /// - the index must be in the stacks range
     /// - this now allows bad reads but non would be executed automatically
     #[inline]
-    pub unsafe fn set_write_index(&mut self, idx: usize) { unsafe {
-        self.head = self.above.sub(idx);
-    }}
+    pub unsafe fn set_write_index(&mut self, idx: usize) {
+        unsafe {
+            self.head = self.above.sub(idx);
+        }
+    }
 
     #[inline]
     pub fn len(&self) -> usize {
@@ -113,11 +126,11 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
     #[inline]
-    pub fn is_empty(&self) ->bool{
-        self.len()==0
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
-/*──────────────────── push / pop ───────────────────────*/
+    /*──────────────────── push / pop ───────────────────────*/
     #[inline]
     pub fn push(&mut self, v: T) -> Result<(), T> {
         if self.room_left() == 0 {
@@ -182,8 +195,6 @@ impl<'mem, T> StackRef<'mem, T> {
         Some(())
     }
 
-    
-
     #[inline]
     pub fn pop_many<'b>(&'b mut self, n: usize) -> Option<&'b mut [T]>
     where
@@ -199,16 +210,16 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
-/*──────────────────── allocs ───────────────────────*/
-    /// flushes elements from the stack 
+    /*──────────────────── allocs ───────────────────────*/
+    /// flushes elements from the stack
     #[inline]
-    pub fn flush(&mut self, len:usize) -> Option<()>{
+    pub fn flush(&mut self, len: usize) -> Option<()> {
         if self.write_index() < len {
             return None;
         }
-        unsafe{
+        unsafe {
             //force a drop of these elements
-            for x in from_raw_parts_mut(self.head,len){
+            for x in from_raw_parts_mut(self.head, len) {
                 ptr::read(x);
             }
 
@@ -219,11 +230,11 @@ impl<'mem, T> StackRef<'mem, T> {
 
     /// This frees the memory calling no destructor
     #[inline]
-    pub fn free(&mut self, len:usize) -> Option<()>{
+    pub fn free(&mut self, len: usize) -> Option<()> {
         if self.write_index() < len {
             return None;
         }
-        unsafe{
+        unsafe {
             self.head = self.head.add(len);
             Some(())
         }
@@ -234,27 +245,27 @@ impl<'mem, T> StackRef<'mem, T> {
     /// Using any read operations on it is UB.
     /// This includes flush; however, free is fine.
     #[inline]
-    pub unsafe fn alloc(&mut self, len:usize) -> Option<()>{
+    pub unsafe fn alloc(&mut self, len: usize) -> Option<()> {
         if self.room_left() < len {
             return None;
         }
-        self.head = unsafe{self.head.sub(len)};
+        self.head = unsafe { self.head.sub(len) };
         Some(())
     }
-/*──────────────────── checkpoint ───────────────────────*/
+    /*──────────────────── checkpoint ───────────────────────*/
 
-#[inline]
-    pub fn check_point(&self)-> StackCheckPoint<T>{
+    #[inline]
+    pub fn check_point(&self) -> StackCheckPoint<T> {
         StackCheckPoint(self.head)
     }
 
     /// # Safety
     /// nothing points to memory we are currently freeing
     #[inline]
-    pub unsafe fn goto_checkpoint(&mut self,check_point:StackCheckPoint<T>){
-        self.head=check_point.0;
+    pub unsafe fn goto_checkpoint(&mut self, check_point: StackCheckPoint<T>) {
+        self.head = check_point.0;
     }
-/*──────────────────── peek helpers ─────────────────────*/
+    /*──────────────────── peek helpers ─────────────────────*/
     #[inline]
     pub fn peek<'b>(&'b self) -> Option<&'b T> {
         self.peek_n::<1>().map(|a| &a[0])
@@ -296,7 +307,7 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
-/*──────────────────── complex handeling ─────────────────────*/
+    /*──────────────────── complex handeling ─────────────────────*/
     /// Drop `count` items located `skip` elements below the top.
     pub fn drop_inside(&mut self, skip: usize, count: usize) -> Option<()> {
         if skip + count > self.write_index() {
@@ -322,9 +333,9 @@ impl<'mem, T> StackRef<'mem, T> {
         let left = unsafe { slice::from_raw_parts_mut(self.head, live) };
         let right = StackRef {
             above: self.head,
-            head:  self.head,
-            end:   self.end,
-            _ph:   PhantomData,
+            head: self.head,
+            end: self.end,
+            _ph: PhantomData,
         };
         (left, right)
     }
@@ -335,33 +346,38 @@ impl<'mem, T> StackRef<'mem, T> {
         let ptr_live = self.head;
         let right = StackRef {
             above: self.head,
-            head:  self.head,
-            end:   self.end,
-            _ph:   PhantomData,
+            head: self.head,
+            end: self.end,
+            _ph: PhantomData,
         };
         (ptr_live, right)
     }
 }
 /*──────────────────── iterator ─────────────────────────*/
-impl<T> Iterator for StackRef<'_, T> { type Item = T; fn next(&mut self) -> Option<T> { self.pop() } }
-
-impl<T> Index<usize> for StackRef<'_, T>{
-type Output = T;
-fn index<'a>(&'a self, id: usize) -> &'a T{
-    if self.len() <= id {
-        panic!("out of bound index");
+impl<T> Iterator for StackRef<'_, T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        self.pop()
     }
-    unsafe{&*self.above.sub(1+id)}
-}
 }
 
-impl<T> IndexMut<usize> for StackRef<'_, T>{
-fn index_mut<'a>(&'a mut self, id: usize) -> &'a mut T{
-    if self.len() <= id {
-        panic!("out of bound index");
+impl<T> Index<usize> for StackRef<'_, T> {
+    type Output = T;
+    fn index<'a>(&'a self, id: usize) -> &'a T {
+        if self.len() <= id {
+            panic!("out of bound index");
+        }
+        unsafe { &*self.above.sub(1 + id) }
     }
-    unsafe{&mut *self.above.sub(1+id)}
 }
+
+impl<T> IndexMut<usize> for StackRef<'_, T> {
+    fn index_mut<'a>(&'a mut self, id: usize) -> &'a mut T {
+        if self.len() <= id {
+            panic!("out of bound index");
+        }
+        unsafe { &mut *self.above.sub(1 + id) }
+    }
 }
 
 #[test]
@@ -369,7 +385,9 @@ fn test_index_and_index_mut_basic() {
     let mut storage = make_storage::<u32, 4>();
     let mut stack = StackRef::from_slice(&mut storage);
 
-    for v in 1..=3 { stack.push(v).unwrap(); }   // 1 oldest … 3 newest
+    for v in 1..=3 {
+        stack.push(v).unwrap();
+    } // 1 oldest … 3 newest
 
     // Read through Index
     assert_eq!(stack[0], 1);
@@ -386,13 +404,13 @@ fn test_index_and_index_mut_basic() {
 }
 
 #[test]
-#[cfg(feature = "std")]   
+#[cfg(feature = "std")]
 fn test_index_out_of_bounds_panics() {
     use std::panic;
 
     let mut storage = make_storage::<u8, 2>();
     let mut stack = StackRef::from_slice(&mut storage);
-    stack.push(10).unwrap();      // len = 1
+    stack.push(10).unwrap(); // len = 1
 
     // Accessing idx 1 should panic
     let result = panic::catch_unwind(|| {
@@ -400,7 +418,6 @@ fn test_index_out_of_bounds_panics() {
     });
     assert!(result.is_err());
 }
-
 
 #[test]
 fn test_lifo_order() {
@@ -546,7 +563,7 @@ fn test_split_stack() {
 
     let (left, mut right) = original.split();
 
-    assert_eq!(left, [3, 2, 1]);  // top-first
+    assert_eq!(left, [3, 2, 1]); // top-first
     assert_eq!(right.pop(), None);
 
     right.push(10).unwrap();
@@ -625,7 +642,6 @@ fn test_full_usage() {
     stack.pop_many(2).unwrap();
 }
 
-
 #[test]
 fn test_drop_in() {
     let mut data = [10, 20, 30, 40, 50, 60];
@@ -662,7 +678,7 @@ fn test_drop_in() {
 #[test]
 fn test_drop_inside_skip_zero_should_remove_top_items() {
     // stack top-to-bottom: 10 20 30 40
-    let mut data  = [10, 20, 30, 40];
+    let mut data = [10, 20, 30, 40];
     let mut stack = StackRef::new_full(&mut data);
 
     // Ask to drop the top two (10,20)
@@ -676,9 +692,9 @@ fn test_drop_inside_skip_zero_should_remove_top_items() {
     // pops start with 10       ← not removed!
 
     assert_eq!(stack.write_index(), 2, "top items were not removed");
-    assert_eq!(stack.pop(),        Some(30));
-    assert_eq!(stack.pop(),        Some(40));
-    assert_eq!(stack.pop(),        None);
+    assert_eq!(stack.pop(), Some(30));
+    assert_eq!(stack.pop(), Some(40));
+    assert_eq!(stack.pop(), None);
 }
 
 #[test]
@@ -689,32 +705,28 @@ fn test_zero_capacity_stack() {
     let mut stack = StackRef::from_slice(&mut storage);
 
     assert_eq!(stack.write_index(), 0);
-    assert_eq!(stack.room_left(),   0);
+    assert_eq!(stack.room_left(), 0);
 
     assert!(stack.pop().is_none());
     assert_eq!(stack.push(123), Err(123));
 
     let (slice, mut stack2) = stack.split();
 
-    assert_eq!(slice.len(),0);
+    assert_eq!(slice.len(), 0);
     assert_eq!(stack2.write_index(), 0);
-    assert_eq!(stack2.room_left(),   0);
+    assert_eq!(stack2.room_left(), 0);
 
     assert!(stack2.pop().is_none());
     assert_eq!(stack2.push(123), Err(123));
 }
 
-
-
-
-
 /*──────────────────── StackVec ────────────────────────────────*/
 
 pub struct StackVec<'mem, T> {
-    pub (crate) base:     *mut T,
-    pub (crate) len:      usize,
-    pub (crate) capacity: usize,
-    _ph:      PhantomData<&'mem mut [MaybeUninit<T>]>,
+    pub(crate) base: *mut T,
+    pub(crate) len: usize,
+    pub(crate) capacity: usize,
+    _ph: PhantomData<&'mem mut [MaybeUninit<T>]>,
 }
 
 /*────────── constructors ──────────*/
@@ -728,8 +740,8 @@ impl<'mem, T> StackVec<'mem, T> {
             _ph: PhantomData,
         }
     }
-    
-    pub const unsafe fn new_full(buf: &'mem mut [T]) -> Self
+
+    pub const fn new_full(buf: &'mem mut [T]) -> Self
     where
         T: Copy,
     {
@@ -749,9 +761,18 @@ impl<'mem, T> StackVec<'mem, T> {
 /*────────── invariants & meta ──────────*/
 
 impl<T> StackVec<'_, T> {
-    #[inline] pub fn len(&self)       -> usize { self.len }
-    #[inline] pub fn is_empty(&self)  -> bool  { self.len == 0 }
-    #[inline] pub fn room_left(&self) -> usize { self.capacity - self.len }
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    #[inline]
+    pub fn room_left(&self) -> usize {
+        self.capacity - self.len
+    }
 }
 
 /*────────── push / pop ──────────*/
@@ -759,15 +780,21 @@ impl<T> StackVec<'_, T> {
 impl<T> StackVec<'_, T> {
     #[inline]
     pub fn push(&mut self, v: T) -> Result<(), T> {
-        if self.len == self.capacity { return Err(v); }
-        unsafe { self.base.add(self.len).write(v); }
+        if self.len == self.capacity {
+            return Err(v);
+        }
+        unsafe {
+            self.base.add(self.len).write(v);
+        }
         self.len += 1;
         Ok(())
     }
 
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
-        if self.len == 0 { return None; }
+        if self.len == 0 {
+            return None;
+        }
         self.len -= 1;
         unsafe { Some(self.base.add(self.len).read()) }
     }
@@ -775,15 +802,21 @@ impl<T> StackVec<'_, T> {
     /*──── bulk helpers ────*/
     #[inline]
     pub fn push_n<const N: usize>(&mut self, arr: [T; N]) -> Result<(), [T; N]> {
-        if self.room_left() < N { return Err(arr); }
-        unsafe { (self.base.add(self.len) as *mut [T; N]).write(arr); }
+        if self.room_left() < N {
+            return Err(arr);
+        }
+        unsafe {
+            (self.base.add(self.len) as *mut [T; N]).write(arr);
+        }
         self.len += N;
         Ok(())
     }
 
     #[inline]
     pub fn pop_n<const N: usize>(&mut self) -> Option<[T; N]> {
-        if self.len < N { return None; }
+        if self.len < N {
+            return None;
+        }
         self.len -= N;
         unsafe { Some((self.base.add(self.len) as *mut [T; N]).read()) }
     }
@@ -793,7 +826,9 @@ impl<T> StackVec<'_, T> {
     where
         T: Clone,
     {
-        if self.room_left() < src.len() { return None; }
+        if self.room_left() < src.len() {
+            return None;
+        }
         unsafe {
             let dst = slice::from_raw_parts_mut(self.base.add(self.len), src.len());
             dst.clone_from_slice(src);
@@ -802,7 +837,7 @@ impl<T> StackVec<'_, T> {
         Some(())
     }
 
-/*────────── mem managment ──────────*/
+    /*────────── mem managment ──────────*/
 
     /// reserves `len` uninitialised slots (UB to read them).
     /// # Safety
@@ -810,7 +845,9 @@ impl<T> StackVec<'_, T> {
     /// 2. no pops or peeks of these slots may happen
     #[inline]
     pub unsafe fn alloc(&mut self, len: usize) -> Option<()> {
-        if self.room_left() < len { return None; }
+        if self.room_left() < len {
+            return None;
+        }
         self.len += len;
         Some(())
     }
@@ -819,13 +856,15 @@ impl<T> StackVec<'_, T> {
     /// # Safety
     /// 1. the length must be in bounds
     /// 2. if elements are alloced same as alloc
-    pub unsafe fn set_len(&mut self,len:usize){
-        self.len=len;
+    pub unsafe fn set_len(&mut self, len: usize) {
+        self.len = len;
     }
 
     /// Drops `len` values from the top (destructors *run*).
     pub fn flush(&mut self, len: usize) -> Option<()> {
-        if self.len < len { return None; }
+        if self.len < len {
+            return None;
+        }
         unsafe {
             for i in 0..len {
                 ptr::read(self.base.add(self.len - 1 - i));
@@ -838,23 +877,29 @@ impl<T> StackVec<'_, T> {
     /// Discards `len` values from the top (**no** destructors).
     #[inline]
     pub fn free(&mut self, len: usize) -> Option<()> {
-        if self.len < len { return None; }
+        if self.len < len {
+            return None;
+        }
         self.len -= len;
         Some(())
     }
 
-/*────────── peeks & spots ──────────*/
+    /*────────── peeks & spots ──────────*/
 
     #[inline]
     pub fn peek(&self) -> Option<&T> {
-        if self.len == 0 { None }
-        else             { unsafe { Some(&*self.base.add(self.len - 1)) } }
+        if self.len == 0 {
+            None
+        } else {
+            unsafe { Some(&*self.base.add(self.len - 1)) }
+        }
     }
 
     #[inline]
     pub fn peek_many(&self, n: usize) -> Option<&[T]> {
-        if self.len < n { None }
-        else {
+        if self.len < n {
+            None
+        } else {
             unsafe {
                 // contiguous bottom→top order: oldest … newest
                 Some(slice::from_raw_parts(self.base.add(self.len - n), n))
@@ -863,15 +908,19 @@ impl<T> StackVec<'_, T> {
     }
 
     #[inline]
-    pub fn peek_mut(&self) -> Option<&T> {
-        if self.len == 0 { None }
-        else             { unsafe { Some(&mut*self.base.add(self.len - 1)) } }
+    pub fn peek_mut(&self) -> Option<&mut T> {
+        if self.len == 0 {
+            None
+        } else {
+            unsafe { Some(&mut *self.base.add(self.len - 1)) }
+        }
     }
 
     #[inline]
     pub fn peek_many_mut(&self, n: usize) -> Option<&[T]> {
-        if self.len < n { None }
-        else {
+        if self.len < n {
+            None
+        } else {
             unsafe {
                 // contiguous bottom→top order: oldest … newest
                 Some(slice::from_raw_parts_mut(self.base.add(self.len - n), n))
@@ -882,21 +931,28 @@ impl<T> StackVec<'_, T> {
     /// Raw pointer to the current top (no lifetime).
     #[inline]
     pub fn peek_raw(&self) -> Option<*mut T> {
-        if self.len == 0 { None }
-        else             { Some(unsafe { self.base.add(self.len - 1) }) }
+        if self.len == 0 {
+            None
+        } else {
+            Some(unsafe { self.base.add(self.len - 1) })
+        }
     }
 
     /// Mutable ref to the *n*-th value below the top (0 == top).
     #[inline]
     pub fn spot(&mut self, n: usize) -> Option<&mut T> {
-        if n >= self.len { return None; }
+        if n >= self.len {
+            return None;
+        }
         unsafe { Some(&mut *self.base.add(self.len - 1 - n)) }
     }
 
     /// Raw pointer variant (no lifetime).
     #[inline]
     pub fn spot_raw(&mut self, n: usize) -> Option<*mut T> {
-        if n >= self.len { return None; }
+        if n >= self.len {
+            return None;
+        }
         Some(unsafe { self.base.add(self.len - 1 - n) })
     }
 }
@@ -906,14 +962,18 @@ impl<T> StackVec<'_, T> {
 impl<T> Index<usize> for StackVec<'_, T> {
     type Output = T;
     fn index(&self, id: usize) -> &T {
-        if id >= self.len { panic!("index out of bounds"); }
+        if id >= self.len {
+            panic!("index out of bounds");
+        }
         unsafe { &*self.base.add(id) }
     }
 }
 
 impl<T> IndexMut<usize> for StackVec<'_, T> {
     fn index_mut(&mut self, id: usize) -> &mut T {
-        if id >= self.len { panic!("index out of bounds"); }
+        if id >= self.len {
+            panic!("index out of bounds");
+        }
         unsafe { &mut *self.base.add(id) }
     }
 }
@@ -932,11 +992,10 @@ impl<T> Drop for StackVec<'_, T> {
 
 /*──────────────────── write ───────────────────────────*/
 
-impl Write for StackVec<'_,u8>{
-
-fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
-    self.push_slice(s.as_bytes()).ok_or(core::fmt::Error)
-}
+impl Write for StackVec<'_, u8> {
+    fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        self.push_slice(s.as_bytes()).ok_or(core::fmt::Error)
+    }
 }
 
 /*──────────────────── tests ───────────────────────────*/
@@ -948,26 +1007,30 @@ mod tests {
     #[test]
     fn two_slice_concat_and_peek() {
         let mut buf = make_storage::<u32, 6>();
-        let mut st  = StackVec::from_slice(&mut buf);
+        let mut st = StackVec::from_slice(&mut buf);
 
-        st.push_slice(&[10, 11]).unwrap();      // bottom
-        st.push_slice(&[20, 21]).unwrap();      // now on top
+        st.push_slice(&[10, 11]).unwrap(); // bottom
+        st.push_slice(&[20, 21]).unwrap(); // now on top
 
         // Bottom→top order in memory: 10 11 20 21
         assert_eq!(st.peek_many(4).unwrap(), &[10, 11, 20, 21]);
 
         // Top value via peek / peek_raw
         assert_eq!(st.peek(), Some(&21));
-        unsafe { assert_eq!(*st.peek_raw().unwrap(), 21); }
+        unsafe {
+            assert_eq!(*st.peek_raw().unwrap(), 21);
+        }
     }
 
     #[test]
     fn alloc_flush_free_cycle() {
         let mut buf = make_storage::<u8, 8>();
-        let mut st  = StackVec::from_slice(&mut buf);
+        let mut st = StackVec::from_slice(&mut buf);
 
         // Reserve space for 3 bytes (uninitialised)
-        unsafe { st.alloc(3).unwrap(); }
+        unsafe {
+            st.alloc(3).unwrap();
+        }
         assert_eq!(st.len(), 3);
 
         // Overwrite the raw slots properly
@@ -991,10 +1054,10 @@ mod tests {
     #[test]
     fn spot_and_mutate() {
         let mut buf = make_storage::<i32, 4>();
-        let mut st  = StackVec::from_slice(&mut buf);
+        let mut st = StackVec::from_slice(&mut buf);
 
-        st.push_n([1, 2, 3, 4]).unwrap();   // top == 4
-        *st.spot(1).unwrap() = 99;          // change the 3
+        st.push_n([1, 2, 3, 4]).unwrap(); // top == 4
+        *st.spot(1).unwrap() = 99; // change the 3
 
         assert_eq!(st.pop(), Some(4));
         assert_eq!(st.pop(), Some(99));
