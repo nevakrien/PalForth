@@ -1,5 +1,6 @@
 use crate::Code;
 use crate::lex::Lex;
+use crate::lex::StackAllocatorCheckPoint;
 use crate::types::SigError;
 use crate::types::SigItem;
 use crate::types::SigStack;
@@ -8,8 +9,44 @@ use core::cell::UnsafeCell;
 
 pub struct CompContext<'me, 'lex> {
     pub lex: &'me mut Lex<'lex>,
+    start: StackAllocatorCheckPoint,
     pub stack: SigStack<'me, 'lex>,
-    pub immidate_stack: SigStack<'me, 'lex>,
+    immidate_stack: SigStack<'me, 'lex>,
+}
+
+impl<'me, 'lex> CompContext<'me, 'lex> {
+    pub fn new(
+        lex: &'me mut Lex<'lex>,
+        stack: SigStack<'me, 'lex>,
+        immidate_stack: SigStack<'me, 'lex>,
+    ) -> Self {
+        Self {
+            start: lex.code_mem.check_point(),
+            lex,
+            stack,
+            immidate_stack,
+        }
+    }
+
+    pub fn simple_add_word(&mut self, word: &Word<'lex>) -> Result<(), SigError<'lex>> {
+        word.runtime.check_sig(&mut self.stack)?;
+        //add the word into the function
+        self.lex
+            .code_mem
+            .save(Code::word_raw(word.runtime.exe.get()))
+            .expect("out of code mem");
+        Ok(())
+    }
+
+    ///verifies the stack is empty and returns the generated code
+    #[inline]
+    pub fn finalize_code(self) -> Result<&'lex [Code],SigStack<'me, 'lex>>{
+    	if self.stack.stack.is_empty(){
+        	Ok(self.lex.code_mem.index_checkpoint(self.start))
+    	}else{
+    		Err(self.stack)
+    	}
+    }
 }
 
 pub struct Word<'lex> {
@@ -31,7 +68,6 @@ impl From<RuntimeCode<'_>> for *const Code {
 }
 
 impl<'lex> RuntimeCode<'lex> {
-    
     ///# Safety
     /// same as [`Vm::execute_code`]
     #[inline(always)]

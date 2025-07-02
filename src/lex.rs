@@ -148,12 +148,39 @@ impl<'a, T> StackAllocator<'a, T> {
         StackAllocatorCheckPoint(self.0.len())
     }
 
+    #[inline]
+    pub fn try_index_checkpoint(&self, cp: StackAllocatorCheckPoint) -> Option<&'a [T]> {
+        let live = self.0.len() - cp.0;
+        let addr = self.0.peek_many(live)?.as_ptr().addr();
+        let p = self.0.peek_raw()?.with_addr(addr);
+        unsafe { Some(slice::from_raw_parts(p, live)) }
+    }
+
+    #[inline]
+    pub fn index_checkpoint(&self, cp: StackAllocatorCheckPoint) -> &'a [T] {
+        self.try_index_checkpoint(cp)
+            .expect("checkpoint math is wrong")
+    }
+
     /// # Safety
     /// No live references into the abandoned tail may survive.
     #[inline]
     pub unsafe fn goto_checkpoint(&mut self, cp: StackAllocatorCheckPoint) {
         let live = self.0.len() - cp.0;
         self.0.flush(live).expect("checkpoint math is wrong"); // drop each value
+    }
+
+    /// # Safety
+    /// this internal stack lets you break all of the allocators assumbtions
+    /// this function should only be used while viewing the code for the allocator itself
+    #[inline(always)]
+    pub unsafe fn get_inner(&mut self) -> &mut StackVec<'a, T> {
+        &mut self.0
+    }
+
+    #[inline(always)]
+    pub fn with_addr(&self, addr: usize) -> *mut T {
+        self.0.base.with_addr(addr)
     }
 
     #[inline]
