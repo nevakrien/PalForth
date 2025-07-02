@@ -1,3 +1,4 @@
+use crate::types::SigError;
 use crate::PalData;
 use crate::buildins::unwrap_over;
 use crate::buildins::unwrap_under;
@@ -143,19 +144,65 @@ impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
             param_stack: StackRef::from_slice(&mut self.param),
             data_stack: StackRef::from_slice(&mut self.data),
             return_stack: StackRef::from_slice(&mut self.rs),
-            comp: None,
+            comp: CompMode::Task,
         }
     }
+}
+
+pub enum CompMode<'a,'lex>{
+	Task,
+	Run(&'a mut CompContext<'a, 'lex>),
+	Comp(&'a mut CompContext<'a, 'lex>)
+}
+
+impl<'a,'lex> CompMode<'a,'lex>{
+	pub fn get_comp_crash<'b>(&'b mut self)->&'b mut CompContext<'a, 'lex>{
+		match self{
+			CompMode::Task=>panic!("need compile time context to run immidate"),
+			CompMode::Comp(comp)|CompMode::Run(comp)=>comp
+		}
+	}
 }
 
 pub struct Vm<'a, 'lex> {
     pub param_stack: StackRef<'a, *mut PalData>,
     pub data_stack: StackRef<'a, PalData>,
     pub return_stack: StackRef<'a, *const Code>,
-
-    pub comp: Option<&'a mut CompContext<'a, 'lex>>,
+    pub comp: CompMode<'a,'lex>,
 }
 impl Vm<'_, '_> {
+
+	///# Safety
+	/// the VM is valid ie there was no switching of the stack or comp arbitrarily
+	pub unsafe fn respond_to_input<'a>(&mut self,itr:impl Iterator<Item=&'a str>) -> Result<(), SigError>{
+		for s in itr {
+			match &self.comp{
+				CompMode::Task=>todo!(),
+				CompMode::Run(_)=>{
+					let comp = self.comp.get_comp_crash();
+					let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
+					unsafe{
+						word.runtime.clone().comp_run_checked(self)?;
+					}
+				},
+				CompMode::Comp(_)=>{
+					let comp = self.comp.get_comp_crash();
+					let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
+					if let Some(im) = word.immidate {
+						unsafe{
+						   //no typecheck needed
+						   self.execute_code(im)
+						}
+					}else{
+						comp.add_runtime_code(&word.runtime.clone())?;
+					}
+
+				},
+			}
+		}
+		Ok(())
+	}
+
     /// # Safety
     /// the code must be safe to execute in a threaded way (ie no use of return stack for control flow)
     /// the pointer past must point to valid code

@@ -34,10 +34,10 @@ pub struct StackCheckPoint<T>(*mut T);
 /// ```
 pub struct StackRef<'mem, T> {
     //the fact rust is missing const makes this make less effishent code than i would like...
-    pub(crate) above: *mut T, // one-past the *highest* live element
-    pub(crate) head: *mut T,  // next pop / current top (lowest live element)
-    pub(crate) end: *mut T,   // lowest address in the backing buffer
-    pub(crate) _ph: PhantomData<&'mem mut [MaybeUninit<T>]>,
+    above: *mut T, // one-past the *highest* live element
+    head: *mut T,  // next pop / current top (lowest live element)
+    end: *mut T,   // lowest address in the backing buffer
+    _ph: PhantomData<&'mem mut [MaybeUninit<T>]>,
 }
 
 unsafe impl<'m, T: Send> Send for StackRef<'m, T> {}
@@ -351,6 +351,11 @@ impl<'mem, T> StackRef<'mem, T> {
             _ph: PhantomData,
         };
         (ptr_live, right)
+    }
+
+    #[inline(always)]
+    pub fn get_head(&self)->*mut T{
+        self.head
     }
 }
 /*──────────────────── iterator ─────────────────────────*/
@@ -723,9 +728,9 @@ fn test_zero_capacity_stack() {
 /*──────────────────── StackVec ────────────────────────────────*/
 
 pub struct StackVec<'mem, T> {
-    pub(crate) base: *mut T,
-    pub(crate) len: usize,
-    pub(crate) capacity: usize,
+    base: *mut T,
+    len: usize,
+    capacity: usize,
     _ph: PhantomData<&'mem mut [MaybeUninit<T>]>,
 }
 
@@ -954,6 +959,11 @@ impl<T> StackVec<'_, T> {
             return None;
         }
         Some(unsafe { self.base.add(self.len - 1 - n) })
+    }
+
+    #[inline(always)]
+    pub fn get_base(&self)-> *mut T{
+        self.base
     }
 }
 

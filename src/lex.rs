@@ -1,3 +1,4 @@
+use crate::vm::Vm;
 use crate::Code;
 use crate::PalHash;
 use crate::ir::Word;
@@ -29,6 +30,46 @@ pub struct Lex<'lex> {
     pub words: PalHash<&'lex str, Word<'lex>>,
 }
 
+pub const CODE_MEM_SIZE: usize = 1024 * 10;
+pub const DATA_MEM_SIZE: usize = 1024 * 10;
+pub const COMP_DATA_MEM_SIZE: usize = 1024 * 10;
+pub const TYPES_MEM_SIZE: usize = 1024;
+
+pub struct LexEasyMemory<'lex> {
+    code_mem: [MaybeUninit<crate::vm::Code>; CODE_MEM_SIZE],
+    data_mem: [MaybeUninit<u8>; DATA_MEM_SIZE],
+    comp_data_mem: [MaybeUninit<u8>; COMP_DATA_MEM_SIZE],
+    types_mem: [MaybeUninit<Type<'lex>>; TYPES_MEM_SIZE],
+}
+
+impl<'lex> LexEasyMemory<'lex> {
+    pub fn new() -> Self {
+        Self {
+            code_mem: unsafe { MaybeUninit::uninit().assume_init() },
+            data_mem: unsafe { MaybeUninit::uninit().assume_init() },
+            comp_data_mem: unsafe { MaybeUninit::uninit().assume_init() },
+            types_mem: unsafe { MaybeUninit::uninit().assume_init() },
+        }
+    }
+
+    pub fn make_lex(&'lex mut self) -> Lex<'lex> {
+        Lex {
+            code_mem: StackAllocator::new(&mut self.code_mem),
+            data_mem: StackAlloc::from_slice(&mut self.data_mem),
+            comp_data_mem: StackAlloc::from_slice(&mut self.comp_data_mem),
+            types_mem: StackAllocator::new(&mut self.types_mem),
+            type_map: PalHash::new(),
+            words: PalHash::new(),
+        }
+    }
+}
+
+impl<'lex> Default for LexEasyMemory<'lex> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
 pub struct StackAlloc<'a>(StackVec<'a, u8>);
 
@@ -44,7 +85,7 @@ impl<'lex> StackAlloc<'lex> {
     #[inline(always)]
     pub fn alloc<T>(&mut self) -> Option<&'lex mut MaybeUninit<T>> {
         let curr_len = self.0.len();
-        let curr_ptr = unsafe { self.0.base.add(curr_len) };
+        let curr_ptr = unsafe { self.0.get_base().add(curr_len) };
 
         /* built-in helper: bytes to add so `curr_ptr` satisfies `align_of::<T>()` */
         let pad = curr_ptr.align_offset(align_of::<T>());
@@ -105,8 +146,8 @@ impl<'me, 'lex> StackWriter<'me, 'lex> {
     #[inline]
     pub fn finish(self) -> &'lex mut str {
         unsafe {
-            let start = self.alloc.0.base.add(self.start);
-            let len = self.alloc.0.len - self.start;
+            let start = self.alloc.0.get_base().add(self.start);
+            let len = self.alloc.0.len() - self.start;
             let body = core::slice::from_raw_parts_mut(start, len);
             core::str::from_utf8_unchecked_mut(body)
         }
@@ -180,7 +221,7 @@ impl<'a, T> StackAllocator<'a, T> {
 
     #[inline(always)]
     pub fn with_addr(&self, addr: usize) -> *mut T {
-        self.0.base.with_addr(addr)
+        self.0.get_base().with_addr(addr)
     }
 
     #[inline]

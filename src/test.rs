@@ -49,7 +49,7 @@ fn round_trip_inject() {
 
     let psrc = &mut src as *mut _;
     let ptgt = &mut tgt as *mut _;
-    let data_stack_head = vm.data_stack.head;
+    let data_stack_head = vm.data_stack.get_head();
 
     vm.param_stack.push(ptgt).unwrap();
     vm.param_stack.push(psrc).unwrap();

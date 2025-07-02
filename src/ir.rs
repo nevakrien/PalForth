@@ -40,24 +40,47 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
 
     ///verifies the stack is empty and returns the generated code
     #[inline]
-    pub fn finalize_code(self) -> Result<&'lex [Code],SigStack<'me, 'lex>>{
-    	if self.stack.stack.is_empty(){
-        	Ok(self.lex.code_mem.index_checkpoint(self.start))
-    	}else{
-    		Err(self.stack)
-    	}
+    pub fn finalize_code(&self) -> Result<&'lex [Code], ()> {
+        if self.stack.stack.is_empty() {
+            Ok(self.lex.code_mem.index_checkpoint(self.start))
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn finalize_and_store_word(
+        &mut self,
+        name: &'lex str,
+        input_sig: &'lex [SigItem<'lex>],
+        output_sig: &'lex [SigItem<'lex>],
+    ) -> Result<(), ()> {
+        let code = self.finalize_code()?;
+        let runtime = RuntimeCode {
+            exe: Exe::Outlined(code),
+            input_sig,
+            output_sig,
+        };
+        let word = Word {
+            name,
+            runtime,
+            immidate: None,
+        };
+        self.lex.words.insert(name, word);
+        Ok(())
     }
 }
 
+#[derive(Debug,Clone)]
 pub struct Word<'lex> {
     pub name: &'lex str,
     pub runtime: RuntimeCode<'lex>,
-    pub immidate: Option<&'lex UnsafeCell<Code>>,
+    pub immidate: Option<&'lex Code>,
 }
 
 ///a moveble peice of code that may or may not be inlined
 ///for the most part inlined code should be reserved for buildins
 ///inlining derived words can be good but it requires the JIT to do double work
+#[derive(Debug)]
 pub enum Exe<'lex>{
 	Inlined(Code),
 	Outlined(&'lex [Code])
@@ -81,7 +104,7 @@ impl Exe<'_>{
 	}
 }
 
-///an indirect refrence to code
+#[derive(Debug,Clone)]
 pub struct RuntimeCode<'lex> {
     exe: Exe<'lex>,
     pub input_sig: &'lex [SigItem<'lex>],
@@ -105,9 +128,7 @@ impl<'lex> RuntimeCode<'lex> {
     ///other than that checks handle everything
     #[inline]
     pub unsafe fn comp_run_checked(&self, vm: &mut Vm<'_, 'lex>) -> Result<(), SigError<'lex>> {
-        #[rustfmt::skip]
-        let comp = vm.comp.as_mut()
-        .expect("need compile time context to run immidate");
+        let comp = vm.comp.get_comp_crash();
 
         self.check_sig(&mut comp.immidate_stack)?;
 
