@@ -1,4 +1,3 @@
-use crate::vm::Vm;
 use crate::Code;
 use crate::PalHash;
 use crate::ir::Word;
@@ -124,6 +123,7 @@ impl<'lex> StackAlloc<'lex> {
 }
 
 // ───────────── WRITER (printf-style, returns &str) ─────────────────────
+#[must_use]
 pub struct StackWriter<'me, 'lex> {
     alloc: &'me mut StackAlloc<'lex>,
     start: usize,
@@ -152,6 +152,15 @@ impl<'me, 'lex> StackWriter<'me, 'lex> {
             core::str::from_utf8_unchecked_mut(body)
         }
     }
+
+    #[inline]
+    pub fn discard(self){unsafe{
+        self.alloc.goto_checkpoint(StackAllocCheckPoint(self.start))
+    }}
+
+    // pub fn read_from<R:Read>(&mut self,reader:&mut R){
+
+    // }
 }
 
 // ───────────── STACK ALLOC (typed) ─────────────────────────────────────
@@ -323,12 +332,26 @@ mod tests {
         let result = writer.finish();
         assert_eq!(result, "hello world 42");
 
+        //try and discard stuff see if we underflow
+        let mut writer = StackWriter::new(&mut arena);
+        write!(writer, "junk").unwrap();
+        writer.discard();
+
+        let mut writer = StackWriter::new(&mut arena);
+        write!(writer, "finish").unwrap();
+        let result2=writer.finish();
+        assert_eq!(result2, "finish");
+
+        //is it still correct?
+
+        assert_eq!(result, "hello world 42");
+
         // Make sure what we wrote is indeed valid and no extra allocations happened
         let remaining_space = arena.len();
         let used_bytes = 1024 - remaining_space;
 
         assert!(
-            used_bytes >= result.len(),
+            used_bytes >= result.len()+result2.len(),
             "allocator should have used at least result length"
         );
     }

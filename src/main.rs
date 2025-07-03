@@ -1,5 +1,5 @@
 #![allow(unused_variables)]
-use std::io;
+use no_std_io::io;
 use pal_forth::vm::VmEasyMemory;
 use pal_forth::lex::{LexEasyMemory};
 

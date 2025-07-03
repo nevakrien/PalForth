@@ -5,7 +5,6 @@ use crate::types::SigError;
 use crate::types::SigItem;
 use crate::types::SigStack;
 use crate::vm::Vm;
-use core::cell::UnsafeCell;
 
 pub struct CompContext<'me, 'lex> {
     pub lex: &'me mut Lex<'lex>,

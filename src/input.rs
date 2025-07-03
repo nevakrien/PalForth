@@ -1,0 +1,223 @@
+use core::str;
+use no_std_io::io::{Error, ErrorKind, Read};
+
+// pub type InputStream<'a> = &'a dyn Read;
+pub trait InputStream{
+	fn peek(&mut self)->Result<Option<&str>,Error>;
+	fn next_word(&mut self)->Result<Option<&str>,Error>;
+}
+
+
+/// WordStream – N-byte buffer, zero-alloc, incremental UTF-8 validation.
+pub struct WordStream<R: Read, const N: usize = 4096> {
+	r:R,
+	buf:[u8;N],
+	start:usize,
+	valid_len:usize,
+	len:usize,
+}
+
+impl<R: no_std_io::io::Read, const N: usize> WordStream<R,N>{
+	pub fn new(r:R)->Self{
+		Self{
+			r,
+			buf:[0;N],
+			start:0,
+			valid_len:0,
+			len:0,
+		}
+	}
+
+	fn shift_buffer(&mut self){
+		if self.start ==0 {
+			return
+		}
+		unsafe{
+			core::ptr::copy(&self.buf[self.start],&mut self.buf[0],self.len);
+		}
+		self.start=0;
+	}
+
+	fn remainder(&mut self)->&[u8]{
+		let idx = self.start+self.valid_len;
+		let len = self.len-self.valid_len;
+		&self.buf[idx..][..len]
+	}
+
+	//we probably want the error as an IO error isntead.
+	fn extend_valid(&mut self)->Result<(),Error>{
+		match str::from_utf8(self.remainder()) {
+		    Ok(s) => {
+		    	self.valid_len+=s.len();
+		    	Ok(())
+		    }, 
+		    Err(e) => {
+		    	self.valid_len+=e.valid_up_to();
+		    	match e.error_len(){
+		    		Some(_)=>Err(Error::new(ErrorKind::InvalidData,
+                                             "invalid UTF-8")),
+		    		None=>Ok(())
+		    	}
+		    },
+		}
+	}
+
+	pub fn fill(&mut self)->Result<usize,Error>{
+		if self.len == N {
+			return Err(
+				Error::new(
+					ErrorKind::Other,
+                	"Buffer Overflow on word")
+			);
+		}
+		if self.start+self.len == N {
+			self.shift_buffer();
+		}
+
+		let idx = self.start+self.valid_len;
+		let len = self.len-self.valid_len;
+		let spot = &mut self.buf[idx..][..len];
+
+		let added=self.r.read(spot)?;
+		self.len+=added;
+		Ok(added)
+	}
+
+	pub fn scan(&mut self)->Result<Option<&str>,Error>{
+		//make sure we dont acidently return a none
+		self.extend_valid()?;
+
+		//current string
+		let spot = &self.buf[self.start..][..self.valid_len];
+		let s = unsafe{str::from_utf8_unchecked(spot)};
+
+		let mut termed = true;
+
+		//skip whitespaces
+		for c in s.chars(){
+			if c.is_whitespace(){
+				self.len-=c.len_utf8();
+				self.valid_len-=c.len_utf8();
+				self.start+=c.len_utf8();
+				continue;
+			}
+
+			termed=false;
+			break;
+		}
+
+		if termed{
+			//sometimes start would be 1 past the end of the buff
+			//so we set it to 0 in that case
+			if self.len==0{
+				self.start=0;
+			}
+			return Ok(None);
+		}
+
+
+		let spot = &self.buf[self.start..][..self.valid_len];
+		let s = unsafe{str::from_utf8_unchecked(spot)};
+		let mut total_len = 0;
+
+		termed = true;
+		for c in s.chars(){
+			if !c.is_whitespace(){
+				total_len+=c.len_utf8();
+				continue;
+			}
+
+			termed=false;
+			break;
+		}
+
+		//maybe not enough input
+		if termed{
+			return Ok(None);
+		}
+
+		unsafe{Ok(Some(str::from_utf8_unchecked(&spot[..total_len])))}
+	}
+
+	pub unsafe fn consume_bytes(&mut self,total_len:usize){		
+		self.len-=total_len;
+		self.valid_len-=total_len;
+		self.start+=total_len;
+
+	}
+}
+
+
+impl<R: no_std_io::io::Read, const N: usize> InputStream for WordStream<R,N>{
+
+fn peek(&mut self) -> Result<Option<&str>, no_std_io::io::Error> {
+	//rust is dumb about this lifetime for no good reason
+	//it basically thinks that since the Some case borrows that the None case does
+	//scaning twice as well as a todo work so this is basically just rustc being anoying
+	match self.scan()?.map(|s| s as *const str){
+		Some(s)=>Ok(Some(unsafe{&*s})),
+		None=>if self.fill()?==0{
+			return Ok(None)
+		}else{
+			self.scan()
+		}
+	}
+}
+fn next_word(&mut self) -> Result<Option<&str>, no_std_io::io::Error> {
+	match self.scan()?.map(|s| s as *const str){
+		Some(s)=>unsafe{
+			//we need to be careful not to make a ref that lives between calls
+			let len = (&*s).as_bytes().len();
+			let addr = s.addr();
+			self.consume_bytes(len);
+
+			//now s no longer valid... need to reconstruct it
+			//this is basically a no op but the provance changes
+			let p = self.buf.as_ptr().with_addr(addr);
+			let s = core::slice::from_raw_parts(p,len);
+			Ok(Some(str::from_utf8_unchecked(s)))
+		},
+		None=>if self.fill()?==0{
+			return Ok(None)
+		}else{
+			self.scan()
+		}
+	}
+}
+}
+
+/*──────────────────────────── tests ────────────────────────────────*/
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use no_std_io::io::Cursor;
+
+    #[test]
+    fn refill_with_incomplete_utf8_is_ok() {
+        let src   = "αβγ δεζ ";          // two words + space
+        let bytes = src.as_bytes();
+
+        /* explicit per-token byte lengths */
+        let mut parts = src.split_whitespace();
+        let first  = parts.next().unwrap();
+        let second = parts.next().unwrap();
+        assert_eq!(first.as_bytes().len(),  6);
+        assert_eq!(second.as_bytes().len(), 6);
+
+        let mut rdr = WordStream::<_, 9>::new(Cursor::new(bytes));
+
+        assert_eq!(rdr.peek().unwrap(),      Some(first));
+        assert_eq!(rdr.next_word().unwrap(), Some(first));
+        assert_eq!(rdr.next_word().unwrap(), Some(second));
+        assert_eq!(rdr.next_word().unwrap(), None);
+    }
+
+    #[test]
+    fn eof_with_incomplete_seq_errors() {
+        let bad = b"\xE2\x82";   // first two bytes of '€'
+        let mut rdr = WordStream::<_, 8>::new(Cursor::new(bad));
+
+        let err = rdr.next_word().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidData);
+    }
+}

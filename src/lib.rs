@@ -3,11 +3,11 @@
 use crate::vm::Code;
 use hashbrown::HashMap;
 
-pub mod make_stack;
 pub mod stack;
 
 pub mod buildins;
 pub mod ir;
+pub mod input;
 pub mod lex;
 pub mod types;
 pub mod vm;
