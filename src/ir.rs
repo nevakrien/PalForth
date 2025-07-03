@@ -69,7 +69,7 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Word<'lex> {
     pub name: &'lex str,
     pub runtime: RuntimeCode<'lex>,
@@ -80,30 +80,30 @@ pub struct Word<'lex> {
 ///for the most part inlined code should be reserved for buildins
 ///inlining derived words can be good but it requires the JIT to do double work
 #[derive(Debug)]
-pub enum Exe<'lex>{
-	Inlined(Code),
-	Outlined(&'lex [Code])
+pub enum Exe<'lex> {
+    Inlined(Code),
+    Outlined(&'lex [Code]),
 }
 
-impl<'lex> Clone for Exe<'lex>{
-fn clone(&self) -> Self {
-	match self{
-		Exe::Outlined(r)=>Exe::Outlined(r),
-		Exe::Inlined(code) => Exe::Inlined(code.shallow_clone()),
-	}
-}
-}
-
-impl Exe<'_>{
-	pub fn code(self)->Code{
-		match self{
-			Exe::Inlined(code)=>code,
-			Exe::Outlined(slice)=>Code::word(slice),
-		}
-	}
+impl<'lex> Clone for Exe<'lex> {
+    fn clone(&self) -> Self {
+        match self {
+            Exe::Outlined(r) => Exe::Outlined(r),
+            Exe::Inlined(code) => Exe::Inlined(code.shallow_clone()),
+        }
+    }
 }
 
-#[derive(Debug,Clone)]
+impl Exe<'_> {
+    pub fn code(self) -> Code {
+        match self {
+            Exe::Inlined(code) => code,
+            Exe::Outlined(slice) => Code::word(slice),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RuntimeCode<'lex> {
     exe: Exe<'lex>,
     pub input_sig: &'lex [SigItem<'lex>],
@@ -118,8 +118,8 @@ impl<'lex> RuntimeCode<'lex> {
         unsafe { vm.execute_code(&self.code()) }
     }
 
-    pub fn code(&self) -> Code{
-    	self.exe.clone().code()
+    pub fn code(&self) -> Code {
+        self.exe.clone().code()
     }
 
     ///# Safety

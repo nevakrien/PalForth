@@ -154,9 +154,9 @@ impl<'me, 'lex> StackWriter<'me, 'lex> {
     }
 
     #[inline]
-    pub fn discard(self){unsafe{
-        self.alloc.goto_checkpoint(StackAllocCheckPoint(self.start))
-    }}
+    pub fn discard(self) {
+        unsafe { self.alloc.goto_checkpoint(StackAllocCheckPoint(self.start)) }
+    }
 
     // pub fn read_from<R:Read>(&mut self,reader:&mut R){
 
@@ -339,7 +339,7 @@ mod tests {
 
         let mut writer = StackWriter::new(&mut arena);
         write!(writer, "finish").unwrap();
-        let result2=writer.finish();
+        let result2 = writer.finish();
         assert_eq!(result2, "finish");
 
         //is it still correct?
@@ -351,7 +351,7 @@ mod tests {
         let used_bytes = 1024 - remaining_space;
 
         assert!(
-            used_bytes >= result.len()+result2.len(),
+            used_bytes >= result.len() + result2.len(),
             "allocator should have used at least result length"
         );
     }

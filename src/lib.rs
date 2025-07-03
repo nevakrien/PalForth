@@ -6,8 +6,8 @@ use hashbrown::HashMap;
 pub mod stack;
 
 pub mod buildins;
-pub mod ir;
 pub mod input;
+pub mod ir;
 pub mod lex;
 pub mod types;
 pub mod vm;

@@ -354,7 +354,7 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
     #[inline(always)]
-    pub fn get_head(&self)->*mut T{
+    pub fn get_head(&self) -> *mut T {
         self.head
     }
 }
@@ -962,7 +962,7 @@ impl<T> StackVec<'_, T> {
     }
 
     #[inline(always)]
-    pub fn get_base(&self)-> *mut T{
+    pub fn get_base(&self) -> *mut T {
         self.base
     }
 }
@@ -1075,7 +1075,6 @@ mod tests {
 }
 
 /*────────── OS STACK ──────────*/
-
 
 #[cfg(all(unix, feature = "std"))]
 pub unsafe fn new_os_stack<T>() -> Option<StackRef<'static, T>> {

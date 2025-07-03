@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 use no_std_io::io;
+use pal_forth::lex::LexEasyMemory;
 use pal_forth::vm::VmEasyMemory;
-use pal_forth::lex::{LexEasyMemory};
 
 fn main() -> io::Result<()> {
     let mut lex_mem = LexEasyMemory::new();

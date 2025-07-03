@@ -1,10 +1,10 @@
-use crate::types::SigError;
 use crate::PalData;
 use crate::buildins::unwrap_over;
 use crate::buildins::unwrap_under;
 use crate::ir::CompContext;
 use crate::stack::StackRef;
 use crate::stack::make_storage;
+use crate::types::SigError;
 use core::mem::MaybeUninit;
 use core::mem::transmute;
 use core::ptr;
@@ -110,11 +110,11 @@ impl Code {
     }
 
     #[inline(always)]
-    pub fn shallow_clone(&self)->Self{
-    	match self.f.load(Ordering::Relaxed){
-    		Some(f)=>Code::basic_raw(f,self.param.load(Ordering::Relaxed)),
-    		None=>Code::word_raw(self.param.load(Ordering::Relaxed))
-    	}
+    pub fn shallow_clone(&self) -> Self {
+        match self.f.load(Ordering::Relaxed) {
+            Some(f) => Code::basic_raw(f, self.param.load(Ordering::Relaxed)),
+            None => Code::word_raw(self.param.load(Ordering::Relaxed)),
+        }
     }
 }
 
@@ -149,59 +149,60 @@ impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
     }
 }
 
-pub enum CompMode<'a,'lex>{
-	Task,
-	Run(&'a mut CompContext<'a, 'lex>),
-	Comp(&'a mut CompContext<'a, 'lex>)
+pub enum CompMode<'a, 'lex> {
+    Task,
+    Run(&'a mut CompContext<'a, 'lex>),
+    Comp(&'a mut CompContext<'a, 'lex>),
 }
 
-impl<'a,'lex> CompMode<'a,'lex>{
-	pub fn get_comp_crash<'b>(&'b mut self)->&'b mut CompContext<'a, 'lex>{
-		match self{
-			CompMode::Task=>panic!("need compile time context to run immidate"),
-			CompMode::Comp(comp)|CompMode::Run(comp)=>comp
-		}
-	}
+impl<'a, 'lex> CompMode<'a, 'lex> {
+    pub fn get_comp_crash<'b>(&'b mut self) -> &'b mut CompContext<'a, 'lex> {
+        match self {
+            CompMode::Task => panic!("need compile time context to run immidate"),
+            CompMode::Comp(comp) | CompMode::Run(comp) => comp,
+        }
+    }
 }
 
 pub struct Vm<'a, 'lex> {
     pub param_stack: StackRef<'a, *mut PalData>,
     pub data_stack: StackRef<'a, PalData>,
     pub return_stack: StackRef<'a, *const Code>,
-    pub comp: CompMode<'a,'lex>,
+    pub comp: CompMode<'a, 'lex>,
 }
 impl Vm<'_, '_> {
-
-	///# Safety
-	/// the VM is valid ie there was no switching of the stack or comp arbitrarily
-	pub unsafe fn respond_to_input<'a>(&mut self,itr:impl Iterator<Item=&'a str>) -> Result<(), SigError>{
-		for s in itr {
-			match &self.comp{
-				CompMode::Task=>todo!(),
-				CompMode::Run(_)=>{
-					let comp = self.comp.get_comp_crash();
-					let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
-					unsafe{
-						word.runtime.clone().comp_run_checked(self)?;
-					}
-				},
-				CompMode::Comp(_)=>{
-					let comp = self.comp.get_comp_crash();
-					let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
-					if let Some(im) = word.immidate {
-						unsafe{
-						   //no typecheck needed
-						   self.execute_code(im)
-						}
-					}else{
-						comp.add_runtime_code(&word.runtime.clone())?;
-					}
-
-				},
-			}
-		}
-		Ok(())
-	}
+    ///# Safety
+    /// the VM is valid ie there was no switching of the stack or comp arbitrarily
+    pub unsafe fn respond_to_input<'a>(
+        &mut self,
+        itr: impl Iterator<Item = &'a str>,
+    ) -> Result<(), SigError> {
+        for s in itr {
+            match &self.comp {
+                CompMode::Task => todo!(),
+                CompMode::Run(_) => {
+                    let comp = self.comp.get_comp_crash();
+                    let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
+                    unsafe {
+                        word.runtime.clone().comp_run_checked(self)?;
+                    }
+                }
+                CompMode::Comp(_) => {
+                    let comp = self.comp.get_comp_crash();
+                    let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
+                    if let Some(im) = word.immidate {
+                        unsafe {
+                            //no typecheck needed
+                            self.execute_code(im)
+                        }
+                    } else {
+                        comp.add_runtime_code(&word.runtime.clone())?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     /// # Safety
     /// the code must be safe to execute in a threaded way (ie no use of return stack for control flow)
