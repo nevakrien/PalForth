@@ -11,16 +11,19 @@ pub trait InputStream{
 /// WordStream – N-byte buffer, zero-alloc, incremental UTF-8 validation.
 pub struct WordStream<R: Read, const N: usize = 4096> {
 	r:R,
+	r_done:bool,
 	buf:[u8;N],
 	start:usize,
 	valid_len:usize,
 	len:usize,
+
 }
 
 impl<R: no_std_io::io::Read, const N: usize> WordStream<R,N>{
 	pub fn new(r:R)->Self{
 		Self{
 			r,
+			r_done:false,
 			buf:[0;N],
 			start:0,
 			valid_len:0,
@@ -63,6 +66,10 @@ impl<R: no_std_io::io::Read, const N: usize> WordStream<R,N>{
 	}
 
 	pub fn fill(&mut self)->Result<usize,Error>{
+		if self.r_done {
+			return Ok(0)
+		}
+
 		if self.len == N {
 			return Err(
 				Error::new(
@@ -74,12 +81,21 @@ impl<R: no_std_io::io::Read, const N: usize> WordStream<R,N>{
 			self.shift_buffer();
 		}
 
-		let idx = self.start+self.valid_len;
-		let len = self.len-self.valid_len;
-		let spot = &mut self.buf[idx..][..len];
+		let spot = &mut self.buf[self.start+self.len..];
 
 		let added=self.r.read(spot)?;
 		self.len+=added;
+
+		if added == 0 {
+			self.r_done = true;
+
+			//verify there is no weird junk in the end
+			self.extend_valid()?;
+			if self.valid_len != self.len {
+				return Err(Error::new(ErrorKind::InvalidData,
+                                             "invalid UTF-8"))
+			}
+		}
 		Ok(added)
 	}
 
@@ -132,7 +148,7 @@ impl<R: no_std_io::io::Read, const N: usize> WordStream<R,N>{
 		}
 
 		//maybe not enough input
-		if termed{
+		if termed && !self.r_done{
 			return Ok(None);
 		}
 
@@ -159,7 +175,7 @@ fn peek(&mut self) -> Result<Option<&str>, no_std_io::io::Error> {
 		None=>if self.fill()?==0{
 			return Ok(None)
 		}else{
-			self.scan()
+			self.peek()
 		}
 	}
 }
@@ -178,9 +194,9 @@ fn next_word(&mut self) -> Result<Option<&str>, no_std_io::io::Error> {
 			Ok(Some(str::from_utf8_unchecked(s)))
 		},
 		None=>if self.fill()?==0{
-			return Ok(None)
+			Ok(None)
 		}else{
-			self.scan()
+			self.next_word()
 		}
 	}
 }
