@@ -387,6 +387,7 @@ fn call_dyn_executes_target() {
     }
 }
 
+
 #[test]
 fn defualt_logger(){
     crate::DefualtLogger::new_ref().write_all(b"\n!!!!hey I am logger!!!\n").unwrap()

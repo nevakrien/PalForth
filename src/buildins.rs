@@ -63,22 +63,29 @@ macro_rules! dspot {
 
 /*════════════════ macro to define a builtin ════════════════*/
 
-#[macro_export]
-macro_rules! vm_trace {
-    ($code:expr) => {
-        #[cfg(feature = "trace_vm")]
-        {
-            // use whatever logging facility you like
-            println!("executing {}", $name);
-        }
-    };
-}
+// #[macro_export]
+// macro_rules! vm_trace {
+//     ($code:expr) => {
+//         #[cfg(feature = "trace_vm")]
+//         {
+//             // use whatever logging facility you like
+//             println!("executing {}", $name);
+//         }
+//     };
+// }
 
 /*═════════════════════════════ main ════════════════════════════════*/
 
 pub unsafe extern "C-unwind" fn no_op(code_ptr: *const Code, _: &mut Vm) -> *const Code {
     code_ptr
 }
+
+pub unsafe extern "C-unwind" fn log_bytes(code_ptr: *const Code, vm: &mut Vm) -> *const Code { unsafe {
+    let s = param(code_ptr) as *const *const [u8];
+    vm.output.write_all(&**s).unwrap();
+    code_ptr
+}}
+
 
 /* ───────────────── memory / frame ops ───────────────── */
 
@@ -220,6 +227,9 @@ pub unsafe extern "C-unwind" fn tail_call(code_ptr: *const Code, _vm: &mut Vm) -
     unsafe { param(code_ptr) }
 }
 
+///this call only works on words which are not a buildin
+///this is because strictly speaking a buildin is not a valid function (other than ret and tail_call)
+///buildins by themselves do not inform the excutor on when to stop
 pub unsafe extern "C-unwind" fn call_dyn(call_site: *const Code, vm: &mut Vm) -> *const Code {
     unsafe {
         let target = (*pop!(vm)).code;
@@ -227,21 +237,12 @@ pub unsafe extern "C-unwind" fn call_dyn(call_site: *const Code, vm: &mut Vm) ->
         #[cfg(feature = "trace_vm")]
         println!("calling {target:?} dynamically from {call_site:?}");
 
-        //we want the return to be to us not outer scope
-        match (*target).f.load(Ordering::Relaxed) {
-            None => {
-                unwrap_over(vm.return_stack.push(call_site).ok());
-                param(target).wrapping_sub(1)
-            }
-            Some(f) => {
-                //we dont care how f branches no other valid branch
-                f(target, vm);
-                call_site
-            }
-        }
+        unwrap_over(vm.return_stack.push(call_site).ok());
+        param(target).wrapping_sub(1)
     }
 }
 
+///we assume the code is good for threaded excution. also see [`call_dyn`]
 pub unsafe extern "C-unwind" fn call_dyn_threaded(_code: *const Code, vm: &mut Vm) -> *const Code {
     unsafe {
         let code = (*pop!(vm)).code;

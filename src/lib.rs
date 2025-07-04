@@ -6,8 +6,8 @@ use no_std_io::io::{self,Write};
 use crate::vm::Code;
 use hashbrown::HashMap;
 
-extern crate alloc;
-use alloc::boxed::Box;
+// extern crate alloc;
+// use alloc::boxed::Box;
 
 pub mod stack;
 
