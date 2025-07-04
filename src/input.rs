@@ -1,5 +1,5 @@
 use core::str;
-use no_std_io::io::{Error, ErrorKind, Read};
+use crate::io::{Error, ErrorKind, Read};
 
 // pub type InputStream<'a> = &'a dyn Read;
 pub trait InputStream {

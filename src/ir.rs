@@ -1,3 +1,4 @@
+use crate::types::SigStackEasyMemory;
 use crate::lex::StackAllocator;
 use crate::input::InputStream;
 use crate::Code;
@@ -70,6 +71,31 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
     }
 }
 
+#[derive(Default)]
+pub struct CompEasyMemory<'me, 'lex, const STACK_SIZE: usize>{
+	stack:SigStackEasyMemory<'me, 'lex,STACK_SIZE>,
+	immidate_stack:SigStackEasyMemory<'me, 'lex,STACK_SIZE>,
+}
+
+
+impl<'me, 'lex, const STACK_SIZE: usize> CompEasyMemory<'me, 'lex,STACK_SIZE>{
+	pub fn new()->Self{
+		Self::default()
+	}
+	pub fn make_comp<'a:'me>(&'me mut self,lex:&'a mut Lex<'lex>)->CompContext<'me,'lex>{
+		let start = lex.code_mem.check_point();
+
+		CompContext{
+			lex,
+			start,
+
+			immidate_stack:self.immidate_stack.make_sig_stack(),
+			stack:self.stack.make_sig_stack(),
+			input:None,
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct Word<'lex> {
     pub name: &'lex str,
@@ -136,7 +162,7 @@ impl<'lex> RuntimeCode<'lex> {
     ///the type stack must hold correct information
     ///other than that checks handle everything
     #[inline]
-    pub unsafe fn comp_run_checked(&self, vm: &mut Vm<'_, 'lex>) -> Result<(), SigError<'lex>> {
+    pub unsafe fn comp_run_checked<'comp>(&self, vm: &mut Vm<'_,'lex, '_>) -> Result<(), SigError<'lex>> {
         let comp = vm.comp.get_comp_crash();
 
         self.check_sig(&mut comp.immidate_stack)?;

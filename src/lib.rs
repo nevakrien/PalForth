@@ -2,12 +2,17 @@
 
 use crate::types::SigError;
 use core::ptr::NonNull;
-use no_std_io::io::{self,Write};
 use crate::vm::Code;
 use hashbrown::HashMap;
 
-// extern crate alloc;
-// use alloc::boxed::Box;
+extern crate alloc;
+pub use alloc::boxed::Box;
+
+#[cfg(feature = "std")]
+pub use std::io::{self,Write};
+
+#[cfg(not(feature = "std"))]
+pub use no_std_io::io::{self,Write};
 
 pub mod stack;
 

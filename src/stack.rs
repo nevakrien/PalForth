@@ -734,6 +734,9 @@ pub struct StackVec<'mem, T> {
     _ph: PhantomData<&'mem mut [MaybeUninit<T>]>,
 }
 
+unsafe impl<'m, T: Send> Send for StackVec<'m, T> {}
+unsafe impl<'m, T: Sync> Sync for StackVec<'m, T> {}
+
 /*────────── constructors ──────────*/
 
 impl<'mem, T> StackVec<'mem, T> {

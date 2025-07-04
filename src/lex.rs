@@ -77,7 +77,7 @@ pub struct StackAllocCheckPoint(usize); // logical length at CP
 
 impl<'lex> StackAlloc<'lex> {
     #[inline]
-    pub fn from_slice(raw: &'lex mut [MaybeUninit<u8>]) -> Self {
+    pub const fn from_slice(raw: &'lex mut [MaybeUninit<u8>]) -> Self {
         Self(StackVec::from_slice(raw))
     }
 
@@ -171,7 +171,7 @@ pub struct StackAllocatorCheckPoint(usize); // length in elements
 
 impl<'a, T> StackAllocator<'a, T> {
     #[inline]
-    pub fn new(buf: &'a mut [MaybeUninit<T>]) -> Self {
+    pub const fn new(buf: &'a mut [MaybeUninit<T>]) -> Self {
         Self(StackVec::from_slice(buf))
     }
 

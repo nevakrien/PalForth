@@ -1,4 +1,5 @@
 use crate::PalError;
+use crate::Box;
 use no_std_io::io::Write;
 use crate::DefualtLogger;
 use crate::PalData;
@@ -14,7 +15,7 @@ use core::sync::atomic::AtomicPtr;
 use core::sync::atomic::Ordering;
 
 pub type BuildinFunc =
-    for<'vm> unsafe extern "C-unwind" fn(*const Code, &mut Vm<'vm, '_>) -> *const Code;
+    for<'vm> unsafe extern "C-unwind" fn(*const Code, &mut Vm<'vm, '_, '_>) -> *const Code;
 
 #[derive(Debug)]
 pub struct BuildinPtr {
@@ -141,7 +142,7 @@ impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
         Self::default()
     }
 
-    pub fn make_vm(&mut self) -> Vm<'_, '_> {
+    pub fn make_vm(&mut self) -> Vm<'_, '_, '_> {
         Vm {
             param_stack: StackRef::from_slice(&mut self.param),
             data_stack: StackRef::from_slice(&mut self.data),
@@ -152,14 +153,14 @@ impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
     }
 }
 
-pub enum CompMode<'a, 'lex> {
+pub enum CompMode<'comp, 'lex> {
     Task,
-    Run(&'a mut CompContext<'a, 'lex>),
-    Comp(&'a mut CompContext<'a, 'lex>),
+    Run(Box<CompContext<'comp, 'lex>>),
+    Comp(Box<CompContext<'comp, 'lex>>),
 }
 
-impl<'a, 'lex> CompMode<'a, 'lex> {
-    pub fn get_comp_crash<'b>(&'b mut self) -> &'b mut CompContext<'a, 'lex> {
+impl<'lex,'comp> CompMode<'comp,'lex> {
+    pub fn get_comp_crash<'b>(&'b mut self) -> &'b mut CompContext<'comp,'lex> {
         match self {
             CompMode::Task => panic!("need compile time context to run immidate"),
             CompMode::Comp(comp) | CompMode::Run(comp) => comp,
@@ -167,15 +168,15 @@ impl<'a, 'lex> CompMode<'a, 'lex> {
     }
 }
 
-pub struct Vm<'a, 'lex> {
-    pub param_stack: StackRef<'a, *mut PalData>,
-    pub data_stack: StackRef<'a, PalData>,
-    pub return_stack: StackRef<'a, *const Code>,
-    pub comp: CompMode<'a, 'lex>,
-    pub output: &'a mut dyn Write,
+pub struct Vm<'me, 'lex,'comp> {
+    pub param_stack: StackRef<'me, *mut PalData>,
+    pub data_stack: StackRef<'me, PalData>,
+    pub return_stack: StackRef<'me, *const Code>,
+    pub comp: CompMode<'comp,'lex>,
+    pub output: &'me mut dyn Write,
 }
 
-impl Vm<'_, '_> {
+impl Vm<'_, '_, '_> {
     ///# Safety
     /// the VM is valid ie there was no switching of the stack or comp arbitrarily
     pub unsafe fn respond_to_input<'a>(
