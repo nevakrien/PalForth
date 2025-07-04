@@ -1,3 +1,5 @@
+use no_std_io::io::Write;
+use crate::DefualtLogger;
 use crate::PalData;
 use crate::buildins::unwrap_over;
 use crate::buildins::unwrap_under;
@@ -145,6 +147,7 @@ impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
             data_stack: StackRef::from_slice(&mut self.data),
             return_stack: StackRef::from_slice(&mut self.rs),
             comp: CompMode::Task,
+            output:DefualtLogger::new_ref(),
         }
     }
 }
@@ -169,7 +172,9 @@ pub struct Vm<'a, 'lex> {
     pub data_stack: StackRef<'a, PalData>,
     pub return_stack: StackRef<'a, *const Code>,
     pub comp: CompMode<'a, 'lex>,
+    pub output: &'a mut dyn Write,
 }
+
 impl Vm<'_, '_> {
     ///# Safety
     /// the VM is valid ie there was no switching of the stack or comp arbitrarily
@@ -178,17 +183,15 @@ impl Vm<'_, '_> {
         itr: impl Iterator<Item = &'a str>,
     ) -> Result<(), SigError> {
         for s in itr {
-            match &self.comp {
+            match &mut self.comp {
                 CompMode::Task => todo!(),
-                CompMode::Run(_) => {
-                    let comp = self.comp.get_comp_crash();
+                CompMode::Run(comp) => {
                     let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
                     unsafe {
                         word.runtime.clone().comp_run_checked(self)?;
                     }
                 }
-                CompMode::Comp(_) => {
-                    let comp = self.comp.get_comp_crash();
+                CompMode::Comp(comp) => {
                     let word = comp.lex.words.get(s).ok_or_else(|| todo!())?;
                     if let Some(im) = word.immidate {
                         unsafe {

@@ -35,14 +35,13 @@ impl<R: no_std_io::io::Read, const N: usize> WordStream<R, N> {
     }
 
     fn shift_buffer(&mut self) {
-        if self.start == 0 {
-            return;
-        }
-        unsafe {
-            core::ptr::copy(&self.buf[self.start], &mut self.buf[0], self.len);
-        }
-        self.start = 0;
-    }
+	    if self.start == 0 { return; }
+
+	    let end = self.start + self.len;          // exclusive upper bound
+	    self.buf.copy_within(self.start..end, 0); // safe, handles overlap
+	    self.start = 0;
+	}
+
 
     fn remainder(&mut self) -> &[u8] {
         let idx = self.start + self.valid_len;
@@ -50,7 +49,6 @@ impl<R: no_std_io::io::Read, const N: usize> WordStream<R, N> {
         &self.buf[idx..][..len]
     }
 
-    //we probably want the error as an IO error isntead.
     fn extend_valid(&mut self) -> Result<(), Error> {
         match str::from_utf8(self.remainder()) {
             Ok(s) => {

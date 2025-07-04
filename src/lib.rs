@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::ptr::NonNull;
+use no_std_io::io::{self,Write};
 use crate::vm::Code;
 use hashbrown::HashMap;
 
@@ -35,4 +37,47 @@ pub union PalData {
 pub enum PalError {
     StackUnderFlow,
     StackOverFlow,
+}
+
+#[cfg(feature = "std")]
+pub type DefualtLogger = StdOutLogger;
+
+#[cfg(not(feature = "std"))]
+pub type DefualtLogger = NulLogger;
+
+
+#[cfg(feature = "std")]
+pub struct StdOutLogger;
+
+#[cfg(feature = "std")]
+impl StdOutLogger{
+	pub fn new_ref<'a>()->&'a mut Self{
+		unsafe{&mut*NonNull::dangling().as_ptr()}
+	}
+}
+
+#[cfg(feature = "std")]
+impl Write for StdOutLogger {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        io::stdout().write(buf)
+    }
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        io::stdout().flush()
+    }
+}
+
+pub struct NulLogger;
+impl NulLogger{
+	pub fn new_ref<'a>()->&'a mut Self{
+		unsafe{&mut*NonNull::dangling().as_ptr()}
+	}
+}
+
+impl Write for NulLogger{
+#[inline]
+fn write(&mut self, s: &[u8]) -> Result<usize, io::Error> {Ok(s.len())}
+#[inline]
+fn flush(&mut self) -> Result<(), io::Error> {Ok(())}
 }

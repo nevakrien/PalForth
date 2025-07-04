@@ -1,3 +1,4 @@
+use no_std_io::io::Write;
 use crate::FALSE;
 use crate::PalData;
 use crate::TRUE;
@@ -384,4 +385,9 @@ fn call_dyn_executes_target() {
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
         assert_eq!(vm.param_stack.pop().unwrap(), canary);
     }
+}
+
+#[test]
+fn defualt_logger(){
+    crate::DefualtLogger::new_ref().write_all(b"\n!!!!hey I am logger!!!\n").unwrap()
 }

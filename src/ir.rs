@@ -1,3 +1,5 @@
+use crate::lex::StackAllocator;
+use crate::input::InputStream;
 use crate::Code;
 use crate::lex::Lex;
 use crate::lex::StackAllocatorCheckPoint;
@@ -11,6 +13,7 @@ pub struct CompContext<'me, 'lex> {
     start: StackAllocatorCheckPoint,
     pub stack: SigStack<'me, 'lex>,
     immidate_stack: SigStack<'me, 'lex>,
+    pub input: Option<&'me mut dyn InputStream>,
 }
 
 impl<'me, 'lex> CompContext<'me, 'lex> {
@@ -18,22 +21,20 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
         lex: &'me mut Lex<'lex>,
         stack: SigStack<'me, 'lex>,
         immidate_stack: SigStack<'me, 'lex>,
+        input: Option<&'me mut dyn InputStream>,
     ) -> Self {
         Self {
             start: lex.code_mem.check_point(),
             lex,
             stack,
             immidate_stack,
+            input,
         }
     }
 
     pub fn add_runtime_code(&mut self, runtime: &RuntimeCode<'lex>) -> Result<(), SigError<'lex>> {
         runtime.check_sig(&mut self.stack)?;
-        //append the code in
-        self.lex
-            .code_mem
-            .save(runtime.code())
-            .expect("out of code mem");
+        runtime.save_to_alloc(&mut self.lex.code_mem);
         Ok(())
     }
 
@@ -79,27 +80,36 @@ pub struct Word<'lex> {
 ///a moveble peice of code that may or may not be inlined
 ///for the most part inlined code should be reserved for buildins
 ///inlining derived words can be good but it requires the JIT to do double work
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Exe<'lex> {
-    Inlined(Code),
+    Inlined(&'lex [Code]),
     Outlined(&'lex [Code]),
 }
 
-impl<'lex> Clone for Exe<'lex> {
-    fn clone(&self) -> Self {
-        match self {
-            Exe::Outlined(r) => Exe::Outlined(r),
-            Exe::Inlined(code) => Exe::Inlined(code.shallow_clone()),
-        }
+impl<'lex> Exe<'lex> {
+	fn inner_slice(&self)-> &'lex [Code]{
+		match self{
+			Exe::Inlined(s)|Exe::Outlined(s)=>s
+		}
+	}
+    pub fn as_outer(&self)->Code{
+    	Code::word(self.inner_slice())
     }
-}
 
-impl Exe<'_> {
-    pub fn code(self) -> Code {
-        match self {
-            Exe::Inlined(code) => code,
-            Exe::Outlined(slice) => Code::word(slice),
-        }
+    pub fn save_to_alloc(&self,alloc:&mut StackAllocator<Code>){
+		match self{
+			Exe::Outlined(slice)=>{
+				alloc
+				.save(Code::word(slice))
+				.expect("out of code mem");
+			},
+			Exe::Inlined(slice) => {
+				for c in slice.iter() {
+					alloc.save(c.shallow_clone())
+					.expect("out of code mem");
+				}
+			}
+		};
     }
 }
 
@@ -115,11 +125,11 @@ impl<'lex> RuntimeCode<'lex> {
     /// same as [`Vm::execute_code`]
     #[inline(always)]
     pub unsafe fn run(&self, vm: &mut Vm) {
-        unsafe { vm.execute_code(&self.code()) }
+        unsafe { vm.execute_code(&self.exe.as_outer()) }
     }
 
-    pub fn code(&self) -> Code {
-        self.exe.clone().code()
+    pub fn save_to_alloc(&self,alloc:&mut StackAllocator<Code>){
+    	self.exe.save_to_alloc(alloc)
     }
 
     ///# Safety
