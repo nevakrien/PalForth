@@ -22,7 +22,7 @@ pub struct WordStream<R: Read, const N: usize = 4096> {
     len: usize,
 }
 
-impl<R: no_std_io::io::Read, const N: usize> WordStream<R, N> {
+impl<R: Read, const N: usize> WordStream<R, N> {
     pub fn new(r: R) -> Self {
         Self {
             r,
@@ -161,7 +161,7 @@ impl<R: no_std_io::io::Read, const N: usize> WordStream<R, N> {
     }
 }
 
-impl<R: no_std_io::io::Read, const N: usize> InputStream for WordStream<R, N> {
+impl<R: Read, const N: usize> InputStream for WordStream<R, N> {
     fn peek(&mut self) -> Result<Option<&str>, no_std_io::io::Error> {
         //try and avoid reading
         match self.scan()?.map(|s| s as *const str) {

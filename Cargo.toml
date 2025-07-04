@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["std"]
+default = []
 unchecked_underflow = []
 unchecked_overflow = []
 std = ["no_std_io/std"]
@@ -13,8 +13,10 @@ flaky_tests=[]
 
 [dependencies]
 hashbrown = { version = "0.15.4", default-features = false,features=["default-hasher"] }
-libc = "0.2.174"
 no_std_io = "0.6.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.174"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["memoryapi", "winnt"] }

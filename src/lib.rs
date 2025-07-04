@@ -1,9 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use crate::types::SigError;
 use core::ptr::NonNull;
 use no_std_io::io::{self,Write};
 use crate::vm::Code;
 use hashbrown::HashMap;
+
+extern crate alloc;
+use alloc::boxed::Box;
 
 pub mod stack;
 
@@ -34,9 +38,20 @@ pub union PalData {
 }
 
 #[derive(Debug)]
-pub enum PalError {
-    StackUnderFlow,
-    StackOverFlow,
+pub enum PalError<'a> {
+    // StackUnderFlow,
+    // StackOverFlow,
+    SigError(SigError<'a>),
+    Io(io::Error),
+    Missingword(&'a str)
+}
+
+impl<'a> From<SigError<'a>> for PalError<'a>{
+fn from(s: SigError<'a>) -> Self { PalError::SigError(s) }
+}
+
+impl From<io::Error> for PalError<'_>{
+fn from(s: io::Error) -> Self { PalError::Io(s) }
 }
 
 #[cfg(feature = "std")]
