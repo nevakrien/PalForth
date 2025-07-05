@@ -108,6 +108,7 @@ pub struct Word<'lex> {
 ///inlining derived words can be good but it requires the JIT to do double work
 #[derive(Debug,Clone)]
 pub enum Exe<'lex> {
+	///contains the code AND a ret terminator in the end
     Inlined(&'lex [Code]),
     Outlined(&'lex [Code]),
 }
@@ -130,7 +131,7 @@ impl<'lex> Exe<'lex> {
 				.expect("out of code mem");
 			},
 			Exe::Inlined(slice) => {
-				for c in slice.iter() {
+				for c in slice[..slice.len() - 1].iter() {
 					alloc.save(c.shallow_clone())
 					.expect("out of code mem");
 				}
