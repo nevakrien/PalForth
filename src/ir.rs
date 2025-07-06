@@ -114,14 +114,15 @@ pub enum Exe<'lex> {
 }
 
 impl<'lex> Exe<'lex> {
-	fn inner_slice(&self)-> &'lex [Code]{
+	pub fn inner_slice(&self)-> &'lex [Code]{
 		match self{
 			Exe::Inlined(s)|Exe::Outlined(s)=>s
 		}
 	}
-    pub fn as_outer(&self)->Code{
-    	Code::word(self.inner_slice())
-    }
+
+	pub fn code_ptr(&self)-> *const Code{
+		self.inner_slice().as_ptr()
+	}
 
     pub fn save_to_alloc(&self,alloc:&mut StackAllocator<Code>){
 		match self{
@@ -152,7 +153,7 @@ impl<'lex> RuntimeCode<'lex> {
     /// same as [`Vm::execute_code`]
     #[inline(always)]
     pub unsafe fn run(&self, vm: &mut Vm) {
-        unsafe { vm.execute_code(&self.exe.as_outer()) }
+        unsafe { vm.execute_code(self.exe.code_ptr()) }
     }
 
     pub fn save_to_alloc(&self,alloc:&mut StackAllocator<Code>){

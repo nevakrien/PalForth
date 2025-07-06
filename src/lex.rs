@@ -592,3 +592,37 @@ fn test_string_delayed() {
 
     assert_eq!(s, &*delayed)
 }
+
+
+#[test]
+#[cfg( feature = "std")]
+fn test_lex_lifetimes(){
+    use crate::vm::CompMode;
+    use crate::input::WordStream;
+    use std::mem::ManuallyDrop;
+    use crate::ir::CompEasyMemory;
+    use crate::vm::VmEasyMemory;
+
+    let mut vm_mem = VmEasyMemory::<1024>::new();
+    let mut lex_mem = LexEasyMemory::new();
+    let mut comp_mem = CompEasyMemory::<1024>::new();
+
+
+    let lex :&mut Lex=  &mut ManuallyDrop::new(lex_mem.make_lex());
+    let lex_p = lex as *mut _;
+    let lex = unsafe{&mut*lex_p};
+
+    let mut stream: WordStream<_, 1000> = WordStream::new(std::io::stdin());
+
+    let mut vm = vm_mem.make_vm();
+    let mut comp = comp_mem.make_comp(lex);
+
+    comp.input = Some(&mut stream);
+
+    vm.comp=CompMode::Run(comp);
+
+    std::mem::drop(vm);
+    unsafe{
+        core::ptr::drop_in_place(lex_p);
+    }
+}
