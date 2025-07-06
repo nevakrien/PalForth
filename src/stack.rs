@@ -96,6 +96,14 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
+    pub fn set_other<'b>(&self,other:&mut StackRef<'b,T>) ->Result<(),usize>  where T:Clone{
+        other.flush(other.len());
+        for (i,x) in self.peek_all().iter().rev().enumerate(){
+            other.push(x.clone()).map_err(|_| i)?;
+        }
+        Ok(())
+    }
+
     /*──────────────────── invariants ───────────────────────*/
     /// Number of live elements.
     #[inline]
@@ -287,6 +295,11 @@ impl<'mem, T> StackRef<'mem, T> {
         } else {
             unsafe { Some(slice::from_raw_parts(self.head, n)) }
         }
+    }
+
+    #[inline]
+    pub fn peek_all<'b>(&'b self)->&'b[T]{
+        unsafe { slice::from_raw_parts(self.head, self.write_index()) }
     }
 
     #[inline]
@@ -725,6 +738,33 @@ fn test_zero_capacity_stack() {
     assert_eq!(stack2.push(123), Err(123));
 }
 
+#[test]
+    fn test_stacref_set_other_copies_all() {
+        let mut buf1 = make_storage::<i32, 6>();
+        let mut buf2 = make_storage::<i32, 4>();
+
+        let mut src = StackRef::from_slice(&mut buf1);
+        let mut dst = StackRef::from_slice(&mut buf2);
+
+        for v in 1..=3 {
+            src.push(v).unwrap();
+        }
+
+        dst.push(23).unwrap();//make sure we clear dst
+
+        src.set_other(&mut dst).unwrap();
+
+        assert_eq!(dst.pop(), Some(3));
+        assert_eq!(dst.pop(), Some(2));
+        assert_eq!(dst.pop(), Some(1));
+        assert!(dst.is_empty());
+
+        assert_eq!(src.pop(), Some(3));
+        assert_eq!(src.pop(), Some(2));
+        assert_eq!(src.pop(), Some(1));
+        assert!(src.is_empty());
+    }
+
 /*──────────────────── StackVec ────────────────────────────────*/
 
 pub struct StackVec<'mem, T> {
@@ -763,6 +803,14 @@ impl<'mem, T> StackVec<'mem, T> {
 
     pub fn to_slice(self) -> &'mem mut [MaybeUninit<T>] {
         unsafe { slice::from_raw_parts_mut(self.base as *mut _, self.capacity) }
+    }
+
+    pub fn set_other<'b>(&self,other:&mut StackVec<'b,T>) ->Result<(),usize>  where T:Clone{
+        other.flush(other.len());
+        for (i,x) in self.peek_all().iter().enumerate(){
+            other.push(x.clone()).map_err(|_| i)?;
+        }
+        Ok(())
     }
 }
 
@@ -913,6 +961,11 @@ impl<T> StackVec<'_, T> {
                 Some(slice::from_raw_parts(self.base.add(self.len - n), n))
             }
         }
+    }
+
+    #[inline]
+    pub fn peek_all<'b>(&'b self)->&'b[T]{
+        unsafe { slice::from_raw_parts(self.base, self.len) }
     }
 
     #[inline]
@@ -1075,6 +1128,34 @@ mod tests {
         assert_eq!(st.pop(), Some(4));
         assert_eq!(st.pop(), Some(99));
     }
+
+    #[test]
+    fn stackvec_set_other_copies_all() {
+        let mut buf1 = make_storage::<i32, 4>();
+        let mut buf2 = make_storage::<i32, 6>();
+
+        let mut src = StackVec::from_slice(&mut buf1);
+        let mut dst = StackVec::from_slice(&mut buf2);
+
+        for v in 1..=3 {
+            src.push(v).unwrap();
+        }
+
+        dst.push(23).unwrap();//make sure we clear dst
+
+        src.set_other(&mut dst).unwrap();
+
+        assert_eq!(dst.pop(), Some(3));
+        assert_eq!(dst.pop(), Some(2));
+        assert_eq!(dst.pop(), Some(1));
+        assert!(dst.is_empty());
+
+        assert_eq!(src.pop(), Some(3));
+        assert_eq!(src.pop(), Some(2));
+        assert_eq!(src.pop(), Some(1));
+        assert!(src.is_empty());
+    }
+
 }
 
 /*────────── OS STACK ──────────*/

@@ -155,8 +155,8 @@ impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
 
 pub enum CompMode<'comp, 'lex> {
     Task,
-    Run(Box<CompContext<'comp, 'lex>>),
-    Comp(Box<CompContext<'comp, 'lex>>),
+    Run(CompContext<'comp, 'lex>),
+    Comp(CompContext<'comp, 'lex>),
 }
 
 impl<'lex,'comp> CompMode<'comp,'lex> {

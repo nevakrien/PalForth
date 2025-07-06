@@ -19,7 +19,7 @@ fn main() -> () {
     let mut stream: WordStream<_, 1000> = WordStream::new(std::io::stdin());
     comp.input = Some(&mut stream);
 
-    vm.comp=CompMode::Run(Box::new(comp));
+    vm.comp=CompMode::Run(comp);
 
     loop{
         match unsafe{vm.respond_to_input()}{

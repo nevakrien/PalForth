@@ -1,3 +1,4 @@
+use crate::stack::StackVec;
 use crate::lex::DelayedSlice;
 use crate::lex::Lex;
 use crate::lex::StackAllocator;
@@ -248,11 +249,13 @@ impl fmt::Display for SigItem<'_> {
     }
 }
 
-#[derive(Debug)]
-pub struct CompVar<'ctx, 'lex> {
+pub type VarId = usize;
+
+#[derive(Debug,Clone)]
+pub struct CompVar<'lex> {
     pub tp: &'lex Type<'lex>,
     pub offset_from_start: i32,        // first local is 0
-    pub num_borrowed: &'ctx Cell<i32>, // unique borrow is -1
+    pub borrow_id: VarId, // unique borrow is -1
     pub permissions: RwT,
 }
 
@@ -288,8 +291,9 @@ fn check_subset(have: RwT, sig: RwT) -> Result<(), SigError<'static>> {
 }
 
 pub fn use_box_as<'lex>(
-    box_var: &mut CompVar<'_, 'lex>,
+    box_var: &mut CompVar< 'lex>,
     sig: &SigItem<'lex>,
+    borrows: &mut StackVec<i32>,
 ) -> Result<(), SigError<'lex>> {
     if box_var.tp as *const _ != sig.tp as *const _ {
         return Err(SigError::WrongType {
@@ -299,29 +303,28 @@ pub fn use_box_as<'lex>(
     }
     check_subset(box_var.permissions, sig.permissions)?;
 
-    if box_var.num_borrowed.get() == -1 {
+    if borrows[box_var.borrow_id] == -1 {
         return Err(SigError::AlreadyBorrowed);
     }
-    if (sig.permissions & UNIQUE_FLAG != 0) && box_var.num_borrowed.get() != 0 {
+    if (sig.permissions & UNIQUE_FLAG != 0) && borrows[box_var.borrow_id] != 0 {
         return Err(SigError::NeedsUnique);
     }
 
     if sig.permissions & UNIQUE_FLAG != 0 {
-        box_var.num_borrowed.set(-1);
+        borrows[box_var.borrow_id]=-1;
     } else {
-        //num_borrowed++
-        box_var.num_borrowed.set(box_var.num_borrowed.get() + 1);
+        borrows[box_var.borrow_id]+=1;
     }
 
     Ok(())
 }
 
-pub fn free_box_use(box_var: &mut CompVar, sig: RwT) {
+pub fn free_box_use(box_var: &mut CompVar, sig: RwT,borrows: &mut StackAllocator<i32>,) {
     if sig & UNIQUE_FLAG != 0 {
-        box_var.num_borrowed.set(0);
+        borrows[box_var.borrow_id]=0;
     } else {
         //num_borrowed--
-        box_var.num_borrowed.set(box_var.num_borrowed.get() - 1);
+        borrows[box_var.borrow_id]-=1;
     }
 }
 
@@ -329,33 +332,37 @@ pub fn free_box_use(box_var: &mut CompVar, sig: RwT) {
 /// changing any of the underlying stacks is considered unsound
 pub struct SigStack<'me, 'lex> {
     cells_locals: i32,
-    var_arena: StackAllocator<'me, RefCell<CompVar<'me, 'lex>>>,
-    borrows_arena: StackAllocator<'me, Cell<i32>>,
-    pub stack: StackRef<'me, &'me RefCell<CompVar<'me, 'lex>>>,
+    var_arena: StackVec<'me, CompVar<'lex>>,
+    borrows_arena: StackVec<'me, i32>,
+    pub stack: StackRef<'me, VarId>,
 }
 
 impl<'me, 'lex> SigStack<'me, 'lex> {
-    pub fn add_local(&mut self, tp: &'lex Type<'lex>) -> &'me RefCell<CompVar<'me, 'lex>> {
-        let num_borrowed = self
-            .borrows_arena
-            .save(Cell::new(0))
-            .expect("overflow borrow arena");
+    ///sets the other stack panics on memory missing
+    pub fn set_other(&mut self,mut other:SigStack<'_,'lex>){
+        other.cells_locals=self.cells_locals;
+        self.var_arena.set_other(&mut other.var_arena).expect("overflow var arena");
+        self.borrows_arena.set_other(&mut other.borrows_arena).expect("overflow borrow arena");
+        self.stack.set_other(&mut other.stack).expect("overflow sigstack");
+    }
 
+    pub fn add_local(&mut self, tp: &'lex Type<'lex>) -> VarId {
         let var = CompVar {
             tp,
             permissions: READ_FLAG | WRITE_FLAG | UNIQUE_FLAG,
-            num_borrowed,
+            borrow_id:self.add_borrows(0),
             offset_from_start: self.cells_locals,
         };
-        let ans = self.var_arena.save(var.into()).expect("overflow var arena");
+        self.var_arena.push(var.into()).expect("overflow var arena");
         self.cells_locals += tp.cells;
-        ans
+        self.var_arena.len()-1
     }
 
-    pub fn add_borrows(&mut self, num: i32) -> &'me Cell<i32> {
+    pub fn add_borrows(&mut self, num: i32) -> usize {
         self.borrows_arena
-            .save(Cell::new(num))
-            .expect("overflow borrow arena")
+            .push(num)
+            .expect("overflow borrow arena");
+        self.borrows_arena.len()-1
     }
 
     ///checks a signature and pops out the inputs from the argument stack
@@ -368,7 +375,7 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
         for t in inputs.iter().rev() {
             match self.stack.pop() {
                 None => return Err(SigError::MissingArgument(*t)),
-                Some(b) => use_box_as(&mut b.borrow_mut(), t)?,
+                Some(id) => use_box_as(&mut self.var_arena[id], t,&mut self.borrows_arena)?,
             };
         }
 
@@ -378,22 +385,32 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
         for t in outputs.iter().rev() {
             match stack.pop() {
                 None => return Err(SigError::MissingArgument(*t)),
-                Some(b) => use_box_as(&mut b.borrow_mut(), t)?,
+                Some(id) => use_box_as(&mut self.var_arena[id], t ,&mut self.borrows_arena)?,
             };
         }
 
         Ok(())
     }
+
+    pub fn is_only_outputs(&self) -> bool{
+        for id in self.stack.peek_all(){
+            if (self.var_arena[*id].permissions&OUTPUT_FLAG)==0 {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 // Easy memory struct
-pub struct SigStackEasyMemory<'me, 'lex, const STACK_SIZE: usize> {
-    var_arena_mem: [MaybeUninit<RefCell<CompVar<'me, 'lex>>>; STACK_SIZE],
-    borrows_arena_mem: [MaybeUninit<Cell<i32>>; STACK_SIZE],
-    stack_mem: [MaybeUninit<&'me RefCell<CompVar<'me, 'lex>>>; STACK_SIZE],
+pub struct SigStackEasyMemory<'lex, const STACK_SIZE: usize> {
+    var_arena_mem: [MaybeUninit<CompVar<'lex>>; STACK_SIZE],
+    borrows_arena_mem: [MaybeUninit<i32>; STACK_SIZE],
+    stack_mem: [MaybeUninit<VarId>; STACK_SIZE],
 }
 
-impl<const STACK_SIZE: usize> Default for SigStackEasyMemory<'_, '_, STACK_SIZE> {
+impl<const STACK_SIZE: usize> Default for SigStackEasyMemory<'_, STACK_SIZE> {
     fn default() -> Self {
         Self {
             var_arena_mem: make_storage(),
@@ -403,16 +420,16 @@ impl<const STACK_SIZE: usize> Default for SigStackEasyMemory<'_, '_, STACK_SIZE>
     }
 }
 
-impl<'me, 'lex, const STACK_SIZE: usize> SigStackEasyMemory<'me, 'lex, STACK_SIZE> {
+impl<'lex, const STACK_SIZE: usize> SigStackEasyMemory< 'lex, STACK_SIZE> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn make_sig_stack(&'me mut self) -> SigStack<'me, 'lex> {
+    pub fn make_sig_stack<'me>(&'me mut self) -> SigStack<'me, 'lex> {
         SigStack {
             cells_locals: 0,
-            var_arena: StackAllocator::new(&mut self.var_arena_mem),
-            borrows_arena: StackAllocator::new(&mut self.borrows_arena_mem),
+            var_arena: StackVec::from_slice(&mut self.var_arena_mem),
+            borrows_arena: StackVec::from_slice(&mut self.borrows_arena_mem),
             stack: StackRef::from_slice(&mut self.stack_mem),
         }
     }
@@ -420,197 +437,174 @@ impl<'me, 'lex, const STACK_SIZE: usize> SigStackEasyMemory<'me, 'lex, STACK_SIZ
 
 /* ───────────────────────── SIGSTACK TYPECHECK ───────────────────────── */
 
-#[cfg(test)]
-fn make_types() -> (Type<'static>, Type<'static>) {
-    (
-        Type {
-            inner: TypeInner::Basic,
-            size: 4,
-            cells: 1,
-            name: "int",
-        },
-        Type {
-            inner: TypeInner::Basic,
-            size: 4,
-            cells: 1,
-            name: "float",
-        },
-    )
+/*──────────────────────── test helpers ───────────────────────*/
+
+fn make_int<'lex>() -> Type<'lex> {
+    Type { inner: TypeInner::Basic, size: 4, cells: 1, name: "int" }
 }
+fn make_float<'lex>() -> Type<'lex> {
+    Type { inner: TypeInner::Basic, size: 4, cells: 1, name: "float" }
+}
+
+/*──────────────────────── success ────────────────────────────*/
 
 #[test]
 fn sig_stack_success_case() {
-    let (type_int, type_float) = make_types();
-    let mut sig_mem = SigStackEasyMemory::<'_, '_, 1024>::new();
-    let mut sig_stack = sig_mem.make_sig_stack();
+    let (type_int, type_float) = (make_int(), make_float());
 
-    let var1 = sig_stack.add_local(&type_int);
+    let mut mem = SigStackEasyMemory::<1024>::new();
+    let mut st  = mem.make_sig_stack();
 
-    let num_borrowed = sig_stack.add_borrows(0);
-    let var2 = sig_stack
-        .var_arena
-        .save(RefCell::new(CompVar {
+    // int variable via helper
+    let var1 = st.add_local(&type_int);
+
+    // explicit float variable with custom permissions
+    let borrow_id = st.add_borrows(0);
+    st.var_arena
+        .push(CompVar {
             tp: &type_float,
             offset_from_start: 1,
-            num_borrowed,
+            borrow_id,
             permissions: READ_FLAG,
-        }))
+        })
         .unwrap();
-    sig_stack.stack.push(var1).unwrap();
-    sig_stack.stack.push(var2).unwrap();
+    let var2 = st.var_arena.len() - 1;
+
+    st.stack.push(var1).unwrap();
+    st.stack.push(var2).unwrap();
 
     let inputs = [
-        SigItem {
-            tp: &type_int,
-            permissions: READ_FLAG,
-        },
-        SigItem {
-            tp: &type_float,
-            permissions: READ_FLAG,
-        },
+        SigItem { tp: &type_int,   permissions: READ_FLAG },
+        SigItem { tp: &type_float, permissions: READ_FLAG },
     ];
-    sig_stack.call_sig(&[], &inputs).unwrap();
-    assert_eq!(sig_stack.stack.len(), 0);
+    st.call_sig(&[], &inputs).unwrap();
+    assert_eq!(st.stack.len(), 0);
 }
+
+/*──────────────────────── wrong type ─────────────────────────*/
 
 #[test]
 fn sig_stack_wrong_type_error() {
-    let (type_int, type_float) = make_types();
-    let mut sig_mem = SigStackEasyMemory::<'_, '_, 1024>::new();
-    let mut sig_stack = sig_mem.make_sig_stack();
+    let (type_int, type_float) = (make_int(), make_float());
 
-    let num_borrowed = sig_stack.add_borrows(0);
-    let var1 = sig_stack
-        .var_arena
-        .save(RefCell::new(CompVar {
-            tp: &type_int,
-            offset_from_start: 0,
-            num_borrowed,
-            permissions: READ_FLAG | WRITE_FLAG | UNIQUE_FLAG,
-        }))
-        .unwrap();
-    sig_stack.stack.push(var1).unwrap();
+    let mut mem = SigStackEasyMemory::<1024>::new();
+    let mut st  = mem.make_sig_stack();
 
-    let inputs = [SigItem {
-        tp: &type_float,
-        permissions: READ_FLAG,
-    }];
-    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
-    match err {
+    // stack has an `int`
+    let var1 = st.add_local(&type_int);
+    st.stack.push(var1).unwrap();
+
+    let inputs = [SigItem { tp: &type_float, permissions: READ_FLAG }];
+    match st.call_sig(&[], &inputs).unwrap_err() {
         SigError::WrongType { found, wanted } => {
             assert_eq!(found.name, "int");
             assert_eq!(wanted.name, "float");
         }
-        _ => panic!("Expected WrongType error"),
+        _ => panic!("Expected WrongType"),
     }
 }
+
+/*──────────────────────── missing argument ───────────────────*/
 
 #[test]
 fn sig_stack_missing_argument_error() {
-    let (type_int, _) = make_types();
-    let mut sig_mem = SigStackEasyMemory::<'_, '_, 1024>::new();
-    let mut sig_stack = sig_mem.make_sig_stack();
+    let type_int = make_int();
 
-    let inputs = [SigItem {
-        tp: &type_int,
-        permissions: READ_FLAG,
-    }];
-    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
-    match err {
-        SigError::MissingArgument(item) => {
-            assert_eq!(item.tp.name, "int");
-        }
-        _ => panic!("Expected MissingArgument error"),
+    let mut mem = SigStackEasyMemory::<1024>::new();
+    let mut st  = mem.make_sig_stack();
+
+    let inputs = [SigItem { tp: &type_int, permissions: READ_FLAG }];
+    match st.call_sig(&[], &inputs).unwrap_err() {
+        SigError::MissingArgument(item) => assert_eq!(item.tp.name, "int"),
+        _ => panic!("Expected MissingArgument"),
     }
 }
+
+/*──────────────────────── permission clash ───────────────────*/
 
 #[test]
 fn sig_stack_permission_error() {
-    let (type_int, _) = make_types();
-    let mut sig_mem = SigStackEasyMemory::<'_, '_, 1024>::new();
-    let mut sig_stack = sig_mem.make_sig_stack();
+    let type_int = make_int();
 
-    let num_borrowed = sig_stack.add_borrows(0);
-    let var1 = sig_stack
-        .var_arena
-        .save(RefCell::new(CompVar {
+    let mut mem = SigStackEasyMemory::<1024>::new();
+    let mut st  = mem.make_sig_stack();
+
+    // int variable, READ only
+    let borrow_id = st.add_borrows(0);
+    st.var_arena
+        .push(CompVar {
             tp: &type_int,
             offset_from_start: 0,
-            num_borrowed,
+            borrow_id,
             permissions: READ_FLAG,
-        }))
+        })
         .unwrap();
-    sig_stack.stack.push(var1).unwrap();
+    let var1 = st.var_arena.len() - 1;
+    st.stack.push(var1).unwrap();
 
-    let inputs = [SigItem {
-        tp: &type_int,
-        permissions: WRITE_FLAG,
-    }];
-    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
-    match err {
+    let inputs = [SigItem { tp: &type_int, permissions: WRITE_FLAG }];
+    match st.call_sig(&[], &inputs).unwrap_err() {
         SigError::BasicSigError { clash, have } => {
-            assert_ne!(clash & WRITE_FLAG, 0);
+            assert!(clash & WRITE_FLAG != 0);
             assert_eq!(have & WRITE_FLAG, 0);
         }
-        _ => panic!("Expected BasicSigError for permissions"),
+        _ => panic!("Expected BasicSigError"),
     }
 }
 
+/*──────────────────────── needs unique ───────────────────────*/
+
 #[test]
 fn sig_stack_needs_unique_error() {
-    let (type_int, _) = make_types();
-    let mut sig_mem = SigStackEasyMemory::<'_, '_, 1024>::new();
-    let mut sig_stack = sig_mem.make_sig_stack();
+    let type_int = make_int();
 
-    let num_borrowed = sig_stack.add_borrows(1);
-    let var1 = sig_stack
-        .var_arena
-        .save(RefCell::new(CompVar {
+    let mut mem = SigStackEasyMemory::<1024>::new();
+    let mut st  = mem.make_sig_stack();
+
+    // borrow count = 1  (already shared-borrowed)
+    let borrow_id = st.add_borrows(1);
+    st.var_arena
+        .push(CompVar {
             tp: &type_int,
             offset_from_start: 0,
-            num_borrowed,
+            borrow_id,
             permissions: READ_FLAG | UNIQUE_FLAG,
-        }))
+        })
         .unwrap();
-    sig_stack.stack.push(var1).unwrap();
-    sig_stack.stack.push(var1).unwrap();
+    let var = st.var_arena.len() - 1;
+
+    st.stack.push(var).unwrap();
+    st.stack.push(var).unwrap();
 
     let inputs = [
-        SigItem {
-            tp: &type_int,
-            permissions: UNIQUE_FLAG,
-        },
-        SigItem {
-            tp: &type_int,
-            permissions: UNIQUE_FLAG,
-        },
+        SigItem { tp: &type_int, permissions: UNIQUE_FLAG },
+        SigItem { tp: &type_int, permissions: UNIQUE_FLAG },
     ];
-    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
-    assert!(matches!(err, SigError::NeedsUnique));
+    assert!(matches!(st.call_sig(&[], &inputs).unwrap_err(), SigError::NeedsUnique));
 }
+
+/*──────────────────────── already borrowed ───────────────────*/
 
 #[test]
 fn sig_stack_already_borrowed_error() {
-    let (type_int, _) = make_types();
-    let mut sig_mem = SigStackEasyMemory::<'_, '_, 1024>::new();
-    let mut sig_stack = sig_mem.make_sig_stack();
+    let type_int = make_int();
 
-    let num_borrowed = sig_stack.add_borrows(-1);
-    let var1 = sig_stack
-        .var_arena
-        .save(RefCell::new(CompVar {
+    let mut mem = SigStackEasyMemory::<1024>::new();
+    let mut st  = mem.make_sig_stack();
+
+    // borrow count = -1  (currently unique-borrowed)
+    let borrow_id = st.add_borrows(-1);
+    st.var_arena
+        .push(CompVar {
             tp: &type_int,
             offset_from_start: 0,
-            num_borrowed,
+            borrow_id,
             permissions: READ_FLAG | UNIQUE_FLAG,
-        }))
+        })
         .unwrap();
-    sig_stack.stack.push(var1).unwrap();
+    let var = st.var_arena.len() - 1;
+    st.stack.push(var).unwrap();
 
-    let inputs = [SigItem {
-        tp: &type_int,
-        permissions: READ_FLAG,
-    }];
-    let err = sig_stack.call_sig(&[], &inputs).unwrap_err();
-    assert!(matches!(err, SigError::AlreadyBorrowed));
+    let inputs = [SigItem { tp: &type_int, permissions: READ_FLAG }];
+    assert!(matches!(st.call_sig(&[], &inputs).unwrap_err(), SigError::AlreadyBorrowed));
 }

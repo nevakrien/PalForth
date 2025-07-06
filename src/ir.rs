@@ -42,7 +42,7 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
     ///verifies the stack is empty and returns the generated code
     #[inline]
     pub fn finalize_code(&self) -> Result<&'lex [Code], ()> {
-        if self.stack.stack.is_empty() {
+        if self.stack.is_only_outputs() {
             Ok(self.lex.code_mem.index_checkpoint(self.start))
         } else {
             Err(())
@@ -72,17 +72,17 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
 }
 
 #[derive(Default)]
-pub struct CompEasyMemory<'me, 'lex, const STACK_SIZE: usize>{
-	stack:SigStackEasyMemory<'me, 'lex,STACK_SIZE>,
-	immidate_stack:SigStackEasyMemory<'me, 'lex,STACK_SIZE>,
+pub struct CompEasyMemory< 'lex, const STACK_SIZE: usize>{
+	stack:SigStackEasyMemory< 'lex,STACK_SIZE>,
+	immidate_stack:SigStackEasyMemory< 'lex,STACK_SIZE>,
 }
 
 
-impl<'me, 'lex, const STACK_SIZE: usize> CompEasyMemory<'me, 'lex,STACK_SIZE>{
+impl< 'lex, const STACK_SIZE: usize> CompEasyMemory< 'lex,STACK_SIZE>{
 	pub fn new()->Self{
 		Self::default()
 	}
-	pub fn make_comp<'a:'me>(&'me mut self,lex:&'a mut Lex<'lex>)->CompContext<'me,'lex>{
+	pub fn make_comp<'me>(&'me mut self,lex:&'me mut Lex<'lex>)->CompContext<'me,'lex>{
 		let start = lex.code_mem.check_point();
 
 		CompContext{
