@@ -5,19 +5,36 @@ use crate::lex::StackAllocator;
 use crate::lex::StackWriter;
 use crate::stack::StackRef;
 use crate::stack::make_storage;
-use core::cell::Cell;
-use core::cell::RefCell;
 use core::fmt;
 use core::fmt::Write;
 use core::mem::MaybeUninit;
 
-pub const READ_FLAG: u8 = 0x1;
-pub const WRITE_FLAG: u8 = 0x2;
-pub const UNIQUE_FLAG: u8 = 0x4;
-pub const OUTPUT_FLAG: u8 = 0x8; //whethere or not this stays on the output stack
-pub const RAW_FLAG: u8 = 0x10; //if set the value is passed on the data stack (this convention cant be easily automated)
-pub const INDEX_FLAG: u8 = 0x20; //only relvent for outputs if set the return pointer may be ANY pointer Derived!!! from the input (which has lifetime implications) this convention cant be easily automated
+
 pub type RwT = u8;
+
+///can this be read? (uninilized memory is not marked read)
+pub const READ_FLAG: u8 = 0x1;
+
+///can this be written to NOTE that this still does not allow inject which requires [`UNIQUE_FLAG`] as well it only allows for non unique
+///this is to avoid bugs where the input to a function also happens to be in the output which is baned by defualt
+pub const WRITE_FLAG: u8 = 0x2;
+
+///marks unique access which is expected from outputs by defualt to avoid weird situations of order of writes mattering
+///as a bonus this gives us memcpy instead of memove and the ability to make some statments on thread safety
+pub const UNIQUE_FLAG: u8 = 0x4;
+
+///whether or not this stays on the output stack
+pub const OUTPUT_FLAG: u8 = 0x8;
+
+///if set the value is passed on the data stack (this convention cant be easily automated) 
+pub const RAW_FLAG: u8 = 0x10;
+
+///only relvent for outputs if set the return pointer may be ANY pointer Derived!!! from the input (which has lifetime implications) this convention cant be easily automated
+pub const INDEX_FLAG: u8 = 0x20;
+
+///whether or not this can be sent to another thread for read (non unique writbles can be made to read while actually not being sync)
+///note that to make a sync from a unique write requires a seprate borrow which is unique and does not allow write.
+pub const SYNC_FLAG: u8 = 0x40;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessMode {
@@ -88,6 +105,11 @@ impl fmt::Display for SigError<'_> {
                 if clash & UNIQUE_FLAG != 0 {
                     writeln!(f, "  - expected unique access, but it's missing")?;
                 }
+
+                if clash & SYNC_FLAG != 0 {
+                    writeln!(f, "  - expected multi threaded access, but it's missing")?;
+                }
+
                 if clash & OUTPUT_FLAG != 0 {
                     let actual = if have & OUTPUT_FLAG != 0 {
                         "output"
@@ -244,6 +266,7 @@ impl fmt::Display for SigItem<'_> {
         show_flag!(OUTPUT_FLAG, "output");
         show_flag!(RAW_FLAG, "raw");
         show_flag!(INDEX_FLAG, "index");
+        show_flag!(SYNC_FLAG, "sync");
 
         write!(f, "]")
     }
@@ -271,6 +294,11 @@ fn check_subset(have: RwT, sig: RwT) -> Result<(), SigError<'static>> {
     if (sig & READ_FLAG != 0) && (have & READ_FLAG == 0) {
         clash |= READ_FLAG;
     }
+
+    if (sig & SYNC_FLAG != 0) && (have & SYNC_FLAG == 0) {
+        clash |= SYNC_FLAG;
+    }
+
     if (sig & OUTPUT_FLAG) != (have & OUTPUT_FLAG) {
         clash |= OUTPUT_FLAG;
     }
@@ -349,7 +377,7 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
     pub fn add_local(&mut self, tp: &'lex Type<'lex>) -> VarId {
         let var = CompVar {
             tp,
-            permissions: READ_FLAG | WRITE_FLAG | UNIQUE_FLAG,
+            permissions: WRITE_FLAG | UNIQUE_FLAG,//not sync since borrow checker would downcast to non unique sync
             borrow_id:self.add_borrows(0),
             offset_from_start: self.cells_locals,
         };
