@@ -354,8 +354,6 @@ pub fn free_var_use(var_var: &mut CompVar, sig: RwT,borrows: &mut Vec<i32>,) {
     }
 }
 
-/// # Safety
-/// changing any of the underlying stacks is considered unsound
 #[derive(Clone)]
 pub struct SigStack<'lex> {
     cells_locals: i32,
@@ -380,6 +378,27 @@ impl<'lex> SigStack<'lex> {
     pub fn new()->Self{
         Self::default()
     }
+
+    pub fn push(&mut self,var:VarId){
+        self.stack.push(var)
+    }
+
+    pub fn get_var(&self,idx:VarId)->&CompVar<'lex>{
+        &self.var_arena[idx]
+    }
+
+    pub fn get_var_mut(&mut self,idx:VarId)->&mut CompVar<'lex>{
+        &mut self.var_arena[idx]
+    }
+
+    pub fn get_borrow(&self,idx:VarId)->&i32{
+        &self.borrows_arena[idx]
+    }
+
+    pub fn get_borrow_mut(&mut self,idx:VarId)->&mut i32{
+        &mut self.borrows_arena[idx]
+    }
+
     pub fn add_local(&mut self, tp: &'lex Type<'lex>) -> VarId {
         let var = CompVar {
             tp,
@@ -447,7 +466,17 @@ impl<'lex> SigStack<'lex> {
     }
 
     pub fn verify_end(&self)->bool{
-        self.stack.len()==self.num_outputs as usize
+        if self.stack.len()!=self.num_outputs as usize {
+            return false
+        }
+
+        for id in self.stack.iter().rev(){
+            if *self.get_borrow(*id)!=0 {
+                return false
+            }
+        }
+
+        return true
     }
 }
 
