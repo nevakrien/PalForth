@@ -407,15 +407,17 @@ impl<'lex> SigStack<'lex> {
         outputs: &[SigItem<'lex>],
         inputs: &[SigItem<'lex>],
     ) -> Result<(), SigError<'lex>> {
+
+
+        //first consume all the inputs and outputs without poping
+        let mut stack = self.stack.iter().rev();
+
         for t in inputs.iter().rev() {
-            match self.stack.pop() {
+            match stack.next() {
                 None => return Err(SigError::MissingArgument(*t)),
-                Some(id) => use_box_as(&mut self.var_arena[id], t,&mut self.borrows_arena)?,
+                Some(id) => use_box_as(&mut self.var_arena[*id], t,&mut self.borrows_arena)?,
             };
         }
-
-        //checkpoint here so outputs arent poped
-        let mut stack = self.stack.iter().rev();
 
         for t in outputs.iter().rev() {
             match stack.next() {
@@ -424,6 +426,19 @@ impl<'lex> SigStack<'lex> {
             };
         }
 
+        //we have now verified the signature time to free
+
+        for t in inputs.iter().rev() {
+            let id = self.stack.pop().unwrap();
+            free_box_use(&mut self.var_arena[id], t.permissions,&mut self.borrows_arena);
+            
+        }
+
+        let mut stack = self.stack.iter().rev();
+        for t in outputs.iter().rev() {
+            let id = stack.next().unwrap();
+            free_box_use(&mut self.var_arena[*id], t.permissions,&mut self.borrows_arena);
+        }
         Ok(())
     }
 

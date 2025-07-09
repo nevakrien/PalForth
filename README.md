@@ -85,3 +85,7 @@ however for indexing we want to be more clever and this is where we ALLOW a func
 these functions are for the most part buildins but in principle it should be possible to write them safely.
 
 the tricky part is that they do in fact have lifetime issues and thus kind of by definition require an internally unsafe implementation unless we had a full Rust like lifetime system (which we on purpose do not)
+
+# TODOs
+
+1. add the freeing of borrows logic into the type system via sensible borrow destructors
