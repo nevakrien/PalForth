@@ -1,3 +1,4 @@
+use core::ops::DerefMut;
 use crate::Code;
 use crate::PalHash;
 use crate::ir::Word;
@@ -69,6 +70,43 @@ impl Default for LexEasyMemory<'_> {
     }
 }
 
+pub struct RefBox<'a,T:?Sized>{
+    ptr:*mut T,
+    _ph:PhantomData<&'a mut T>,
+}
+impl<'a, T:?Sized> RefBox<'a,T>{
+    pub unsafe fn new(t:&'a mut T)->Self{
+        Self{
+            ptr:t,
+            _ph:PhantomData
+        }
+    }
+
+    pub fn leak(self)->&'a mut T{
+        let ans = unsafe{
+            &mut* self.ptr
+        };
+        core::mem::forget(self);
+        ans
+    }
+}
+
+impl<T:?Sized> Drop for RefBox<'_, T>{
+
+fn drop(&mut self) { unsafe{
+    core::ptr::drop_in_place(self.ptr)
+} }
+}
+
+impl<T:?Sized> Deref for RefBox<'_,T>{
+type Target = T;
+fn deref(&self) -> &T { unsafe{&*self.ptr}}
+
+}
+impl<T:?Sized> DerefMut for RefBox<'_,T>{
+fn deref_mut(&mut self) -> &mut T { unsafe{&mut *self.ptr} }
+}
+
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
 pub struct StackAlloc<'a>(StackVec<'a, u8>);
 
@@ -81,7 +119,7 @@ impl<'lex> StackAlloc<'lex> {
         Self(StackVec::from_slice(raw))
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn alloc<T>(&mut self) -> Option<&'lex mut MaybeUninit<T>> {
         let curr_len = self.0.len();
         let curr_ptr = unsafe { self.0.get_base().add(curr_len) };
@@ -98,10 +136,63 @@ impl<'lex> StackAlloc<'lex> {
         }
     }
 
+
+
+    // #[inline]
+    // pub fn save_slice<T:Clone>(&mut self,t:&[T])->Option<&'lex mut [T]> {
+    //     let layout =  Layout::array::<T>(t.len());
+        
+    //     self.alloc().map(|x| x.write(t))
+    // }
+
     #[inline]
-    pub fn save<T>(&mut self,t:T)->&'lex mut T {
-        self.alloc().expect("not enough comp mem").write(t)
+    pub fn save<T>(&mut self,t:T)->Option<RefBox<'lex,T>> {
+        self.alloc().map(|x| 
+            unsafe{
+                RefBox::new(x.write(t))
+            }
+        )
     }
+
+    #[inline]
+    pub fn save_clone<T:?Sized+Clone>(&mut self,t:&T) -> Option<RefBox<'lex,T>> {
+        let curr_len = self.0.len();
+        let curr_ptr = unsafe { self.0.get_base().add(curr_len) };
+
+        /* built-in helper: bytes to add so `curr_ptr` satisfies `align_of::<T>()` */
+        let pad = curr_ptr.align_offset(align_of::<T>());
+        debug_assert!(pad != usize::MAX, "impossible alignment failure");
+
+        let total = pad + core::mem::size_of_val(t); // pad + payload
+        unsafe {
+            self.0.alloc(total)?; // bump StackVec ↑
+            let slot = curr_ptr.add(pad) as *mut MaybeUninit<T>;
+            Some(RefBox::new((&mut *slot).write(t.clone())))
+        }
+    }
+
+    #[inline]
+    pub fn save_slice<T:?Sized+Clone>(&mut self,t:&[T]) -> Option<RefBox<'lex,[T]>> {
+        let curr_len = self.0.len();
+        let curr_ptr = unsafe { self.0.get_base().add(curr_len) };
+
+        /* built-in helper: bytes to add so `curr_ptr` satisfies `align_of::<T>()` */
+        let pad = curr_ptr.align_offset(align_of::<T>());
+        debug_assert!(pad != usize::MAX, "impossible alignment failure");
+
+        let total = pad + core::mem::size_of_val(t); // pad + payload
+        unsafe {
+            self.0.alloc(total)?; // bump StackVec ↑
+            let slot = curr_ptr.add(pad) as *mut MaybeUninit<T>;
+            let slot: &mut [MaybeUninit<T>] = core::slice::from_raw_parts_mut(slot,t.len());
+            for (s,x) in slot.into_iter().zip(t.iter()){
+                s.write(x.clone());
+            }
+            let ans = core::slice::from_raw_parts_mut(slot.as_mut_ptr() as *mut T,t.len());
+            Some(RefBox::new(ans))
+        }
+    }
+
 
     #[inline]
     pub fn check_point(&self) -> StackAllocCheckPoint {
@@ -264,7 +355,8 @@ impl<T> IndexMut<usize> for StackAllocator<'_, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
+use super::*;
     use crate::stack::make_storage;
     use core::mem::{MaybeUninit, align_of};
 
@@ -359,8 +451,7 @@ mod tests {
 
     #[test]
     fn test_stack_allocator_basic() {
-        extern crate std;
-        use std::boxed::Box;
+        use alloc::boxed::Box;
 
         let mut storage = [const { MaybeUninit::<Box<i32>>::uninit() }; 8];
         let mut alloc = StackAllocator::new(&mut storage);
@@ -382,6 +473,34 @@ mod tests {
         // allocation after rollback should overwrite 30
         let d = alloc.save(Box::new(99)).unwrap();
         assert_eq!(*d, Box::new(99));
+    }
+
+    #[test]
+    fn test_stack_alloc_boxes() {
+        use alloc::boxed::Box;
+
+        let mut storage = [const { MaybeUninit::uninit() }; 1024];
+        let mut alloc = StackAlloc::from_slice(&mut storage);
+
+        let a = alloc.save_slice(&[10,2]).unwrap();
+        let b = alloc.save_clone(&Box::new(20)).unwrap();
+
+        assert_eq!(&*a, &[10,2]);
+        assert_eq!(**b, 20);
+
+        let cp = alloc.check_point();
+        let c = alloc.save(Box::new(30)).unwrap();
+        assert_eq!(*c, Box::new(30));
+
+        core::mem::drop(c);
+        unsafe {
+            alloc.goto_checkpoint(cp);
+        }
+
+        // allocation after rollback should overwrite 30
+        let d = alloc.save(Box::new(99)).unwrap();
+        assert_eq!(*d, Box::new(99));
+
     }
 }
 
