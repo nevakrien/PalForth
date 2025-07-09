@@ -274,7 +274,7 @@ impl fmt::Display for SigItem<'_> {
 
 pub type VarId = usize;
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Copy)]
 pub struct CompVar<'lex> {
     pub tp: &'lex Type<'lex>,
     pub offset_from_start: i32,        // first local is 0
@@ -356,6 +356,13 @@ pub fn free_box_use(box_var: &mut CompVar, sig: RwT,borrows: &mut StackAllocator
     }
 }
 
+// pub struct SigStackView<'me,'lex>{
+//     cells_locals: i32,
+//     var_arena: *mut [CompVar<'lex>],
+//     borrows_arena: StackVec<'me, i32>,
+//     pub stack: StackRef<'me, VarId>,
+// }
+
 /// # Safety
 /// changing any of the underlying stacks is considered unsound
 pub struct SigStack<'me, 'lex> {
@@ -373,11 +380,47 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
         self.borrows_arena.set_other(&mut other.borrows_arena).expect("overflow borrow arena");
         self.stack.set_other(&mut other.stack).expect("overflow sigstack");
     }
+    
+    // pub fn use_mem<'other>(&'other mut self)->SigStack<'other,'lex>{
+    //     SigStack{
+    //         cells_locals:0,
+    //         var_arena:self.var_arena.split().1,
+    //         borrows_arena:self.borrows_arena.split().1,
+    //         stack:self.stack.split().1,
+    //     }
+    // }
+
+    // pub fn split_tail(&mut self)->SigStack<'me,'lex>{
+    //     //VARS
+    //     let mut mem : StackVec<'me,_> = StackVec::new_full(&mut []);
+    //     core::mem::swap(&mut mem,&mut self.var_arena);
+    //     let (mine,var_arena) = mem.split_consume();
+    //     self.var_arena = StackVec::new_full(mine);
+
+    //     //BOROWS
+    //     let mut mem : StackVec<'me,_> = StackVec::new_full(&mut []);
+    //     core::mem::swap(&mut mem,&mut self.borrows_arena);
+    //     let (mine,borrows_arena) = mem.split_consume();
+    //     self.borrows_arena = StackVec::new_full(mine);
+
+    //     //STACK
+    //     let mut mem : StackRef<'me,_> = StackRef::new_full(&mut []);
+    //     core::mem::swap(&mut mem,&mut self.stack);
+    //     let (mine,stack) = mem.split_consume();
+    //     self.stack = StackRef::new_full(mine);
+
+    //     SigStack{
+    //         cells_locals:0,
+    //         var_arena,
+    //         borrows_arena,
+    //         stack,
+    //     }
+    // }
 
     pub fn add_local(&mut self, tp: &'lex Type<'lex>) -> VarId {
         let var = CompVar {
             tp,
-            permissions: WRITE_FLAG | UNIQUE_FLAG,//not sync since borrow checker would downcast to non unique sync
+            permissions: WRITE_FLAG | READ_FLAG | UNIQUE_FLAG,//not sync since borrow checker would downcast to non unique sync
             borrow_id:self.add_borrows(0),
             offset_from_start: self.cells_locals,
         };

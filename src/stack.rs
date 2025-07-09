@@ -138,6 +138,20 @@ impl<'mem, T> StackRef<'mem, T> {
         self.len() == 0
     }
 
+    #[inline]
+    pub fn get_end(&self)->*mut T{
+        self.end
+    }
+
+    ///this is used to manually set the capacity of the stack
+    ///# Safety 
+    /// obviously this is very unsafe and all the underlying memory must be valid
+    /// further it needs to be the same allocation
+    #[inline]
+    pub unsafe fn set_end(&mut self,end:*mut T){
+        self.end=end;
+    }
+
     /*──────────────────── push / pop ───────────────────────*/
     #[inline]
     pub fn push(&mut self, v: T) -> Result<(), T> {
@@ -342,6 +356,19 @@ impl<'mem, T> StackRef<'mem, T> {
     /// (live slice on the left, empty stack on the right)
     #[inline]
     pub fn split<'b>(&'b mut self) -> (&'b mut [T], StackRef<'b, T>) {
+        let live = self.write_index();
+        let left = unsafe { slice::from_raw_parts_mut(self.head, live) };
+        let right = StackRef {
+            above: self.head,
+            head: self.head,
+            end: self.end,
+            _ph: PhantomData,
+        };
+        (left, right)
+    }
+
+    #[inline]
+    pub fn split_consume(self) -> (&'mem mut [T], StackRef<'mem, T>) {
         let live = self.write_index();
         let left = unsafe { slice::from_raw_parts_mut(self.head, live) };
         let right = StackRef {
@@ -833,7 +860,7 @@ impl<T> StackVec<'_, T> {
 
 /*────────── push / pop ──────────*/
 
-impl<T> StackVec<'_, T> {
+impl<'me, T> StackVec<'me, T> {
     #[inline]
     pub fn push(&mut self, v: T) -> Result<(), T> {
         if self.len == self.capacity {
@@ -1021,6 +1048,51 @@ impl<T> StackVec<'_, T> {
     pub fn get_base(&self) -> *mut T {
         self.base
     }
+
+    /*────────── split ──────────*/
+
+    /// (live slice on the left, empty StackVec on the right)
+    #[inline]
+    pub fn split<'b>(&'b mut self) -> (&'b mut [T], StackVec<'b, T>) {
+        let live = self.len;
+        let left = unsafe { slice::from_raw_parts_mut(self.base, live) };
+
+        let right = StackVec {
+            base: unsafe { self.base.add(live) },
+            len: 0,
+            capacity: self.capacity - live,
+            _ph: PhantomData,
+        };
+        (left, right)
+    }
+
+    #[inline]
+    pub fn split_consume(self) -> (&'me mut [T], StackVec<'me, T>) {
+        let live = self.len;
+        let left = unsafe { slice::from_raw_parts_mut(self.base, live) };
+
+        let right = StackVec {
+            base: unsafe { self.base.add(live) },
+            len: 0,
+            capacity: self.capacity - live,
+            _ph: PhantomData,
+        };
+        (left, right)
+    }
+
+    #[inline]
+    pub fn split_raw<'b>(&'b mut self) -> (*mut T, StackVec<'b, T>) {
+        let live = self.len;
+
+        let right = StackVec {
+            base: unsafe { self.base.add(live) },
+            len: 0,
+            capacity: self.capacity - live,
+            _ph: PhantomData,
+        };
+        (self.base, right)
+    }
+
 }
 
 /*────────── Index / IndexMut ──────────*/
@@ -1155,6 +1227,25 @@ mod tests {
         assert_eq!(src.pop(), Some(1));
         assert!(src.is_empty());
     }
+
+    #[test]
+    fn split_stackvec() {
+        let mut storage = make_storage::<u32, 6>();
+        let mut original = StackVec::from_slice(&mut storage);
+
+        original.push(1).unwrap();
+        original.push(2).unwrap();
+        original.push(3).unwrap();
+
+        let (left, mut right) = original.split();
+
+        assert_eq!(left, [1, 2, 3]); // bottom→top order in memory
+        assert_eq!(right.pop(), None);
+
+        right.push(10).unwrap();
+        assert_eq!(right.pop(), Some(10));
+    }
+
 
 }
 
