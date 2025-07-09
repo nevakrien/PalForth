@@ -96,9 +96,12 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
-    pub fn set_other<'b>(&self,other:&mut StackRef<'b,T>) ->Result<(),usize>  where T:Clone{
+    pub fn set_other<'b>(&self, other: &mut StackRef<'b, T>) -> Result<(), usize>
+    where
+        T: Clone,
+    {
         other.flush(other.len());
-        for (i,x) in self.peek_all().iter().rev().enumerate(){
+        for (i, x) in self.peek_all().iter().rev().enumerate() {
             other.push(x.clone()).map_err(|_| i)?;
         }
         Ok(())
@@ -139,17 +142,17 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
     #[inline]
-    pub fn get_end(&self)->*mut T{
+    pub fn get_end(&self) -> *mut T {
         self.end
     }
 
     ///this is used to manually set the capacity of the stack
-    ///# Safety 
+    ///# Safety
     /// obviously this is very unsafe and all the underlying memory must be valid
     /// further it needs to be the same allocation
     #[inline]
-    pub unsafe fn set_end(&mut self,end:*mut T){
-        self.end=end;
+    pub unsafe fn set_end(&mut self, end: *mut T) {
+        self.end = end;
     }
 
     /*──────────────────── push / pop ───────────────────────*/
@@ -312,7 +315,7 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
     #[inline]
-    pub fn peek_all<'b>(&'b self)->&'b[T]{
+    pub fn peek_all<'b>(&'b self) -> &'b [T] {
         unsafe { slice::from_raw_parts(self.head, self.write_index()) }
     }
 
@@ -766,31 +769,31 @@ fn test_zero_capacity_stack() {
 }
 
 #[test]
-    fn test_stacref_set_other_copies_all() {
-        let mut buf1 = make_storage::<i32, 6>();
-        let mut buf2 = make_storage::<i32, 4>();
+fn test_stacref_set_other_copies_all() {
+    let mut buf1 = make_storage::<i32, 6>();
+    let mut buf2 = make_storage::<i32, 4>();
 
-        let mut src = StackRef::from_slice(&mut buf1);
-        let mut dst = StackRef::from_slice(&mut buf2);
+    let mut src = StackRef::from_slice(&mut buf1);
+    let mut dst = StackRef::from_slice(&mut buf2);
 
-        for v in 1..=3 {
-            src.push(v).unwrap();
-        }
-
-        dst.push(23).unwrap();//make sure we clear dst
-
-        src.set_other(&mut dst).unwrap();
-
-        assert_eq!(dst.pop(), Some(3));
-        assert_eq!(dst.pop(), Some(2));
-        assert_eq!(dst.pop(), Some(1));
-        assert!(dst.is_empty());
-
-        assert_eq!(src.pop(), Some(3));
-        assert_eq!(src.pop(), Some(2));
-        assert_eq!(src.pop(), Some(1));
-        assert!(src.is_empty());
+    for v in 1..=3 {
+        src.push(v).unwrap();
     }
+
+    dst.push(23).unwrap(); //make sure we clear dst
+
+    src.set_other(&mut dst).unwrap();
+
+    assert_eq!(dst.pop(), Some(3));
+    assert_eq!(dst.pop(), Some(2));
+    assert_eq!(dst.pop(), Some(1));
+    assert!(dst.is_empty());
+
+    assert_eq!(src.pop(), Some(3));
+    assert_eq!(src.pop(), Some(2));
+    assert_eq!(src.pop(), Some(1));
+    assert!(src.is_empty());
+}
 
 /*──────────────────── StackVec ────────────────────────────────*/
 
@@ -832,9 +835,12 @@ impl<'mem, T> StackVec<'mem, T> {
         unsafe { slice::from_raw_parts_mut(self.base as *mut _, self.capacity) }
     }
 
-    pub fn set_other<'b>(&self,other:&mut StackVec<'b,T>) ->Result<(),usize>  where T:Clone{
+    pub fn set_other<'b>(&self, other: &mut StackVec<'b, T>) -> Result<(), usize>
+    where
+        T: Clone,
+    {
         other.flush(other.len());
-        for (i,x) in self.peek_all().iter().enumerate(){
+        for (i, x) in self.peek_all().iter().enumerate() {
             other.push(x.clone()).map_err(|_| i)?;
         }
         Ok(())
@@ -991,7 +997,7 @@ impl<'me, T> StackVec<'me, T> {
     }
 
     #[inline]
-    pub fn peek_all<'b>(&'b self)->&'b[T]{
+    pub fn peek_all<'b>(&'b self) -> &'b [T] {
         unsafe { slice::from_raw_parts(self.base, self.len) }
     }
 
@@ -1092,7 +1098,6 @@ impl<'me, T> StackVec<'me, T> {
         };
         (self.base, right)
     }
-
 }
 
 /*────────── Index / IndexMut ──────────*/
@@ -1213,7 +1218,7 @@ mod tests {
             src.push(v).unwrap();
         }
 
-        dst.push(23).unwrap();//make sure we clear dst
+        dst.push(23).unwrap(); //make sure we clear dst
 
         src.set_other(&mut dst).unwrap();
 
@@ -1245,8 +1250,6 @@ mod tests {
         right.push(10).unwrap();
         assert_eq!(right.pop(), Some(10));
     }
-
-
 }
 
 /*────────── OS STACK ──────────*/

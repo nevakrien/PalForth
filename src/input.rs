@@ -1,5 +1,5 @@
-use core::str;
 use crate::io::{Error, ErrorKind, Read};
+use core::str;
 
 // pub type InputStream<'a> = &'a dyn Read;
 pub trait InputStream {
@@ -35,13 +35,14 @@ impl<R: Read, const N: usize> WordStream<R, N> {
     }
 
     fn shift_buffer(&mut self) {
-	    if self.start == 0 { return; }
+        if self.start == 0 {
+            return;
+        }
 
-	    let end = self.start + self.len;          // exclusive upper bound
-	    self.buf.copy_within(self.start..end, 0); // safe, handles overlap
-	    self.start = 0;
-	}
-
+        let end = self.start + self.len; // exclusive upper bound
+        self.buf.copy_within(self.start..end, 0); // safe, handles overlap
+        self.start = 0;
+    }
 
     fn remainder(&mut self) -> &[u8] {
         let idx = self.start + self.valid_len;
@@ -154,7 +155,7 @@ impl<R: Read, const N: usize> WordStream<R, N> {
         unsafe { Ok(Some(str::from_utf8_unchecked(&spot[..total_len]))) }
     }
 
-    pub unsafe fn consume_bytes(&mut self, total_len: usize) {
+    unsafe fn consume_bytes(&mut self, total_len: usize) {
         self.len -= total_len;
         self.valid_len -= total_len;
         self.start += total_len;
@@ -174,7 +175,7 @@ impl<R: Read, const N: usize> InputStream for WordStream<R, N> {
             //only now do we try filling and then check again
             None => {
                 if self.fill()? == 0 {
-                    return Ok(None);
+                    Ok(None)
                 } else {
                     self.peek() //TCO 
                 }
@@ -185,7 +186,7 @@ impl<R: Read, const N: usize> InputStream for WordStream<R, N> {
         match self.scan()?.map(|s| s as *const str) {
             Some(s) => unsafe {
                 //we need to be careful not to make a ref that lives between calls
-                let len = (&*s).as_bytes().len();
+                let len = (*s).len();
                 let addr = s.addr();
 
                 //borrows mut
@@ -223,8 +224,8 @@ mod tests {
         let mut parts = src.split_whitespace();
         let first = parts.next().unwrap();
         let second = parts.next().unwrap();
-        assert_eq!(first.as_bytes().len(), 6);
-        assert_eq!(second.as_bytes().len(), 6);
+        assert_eq!(first.len(), 6);
+        assert_eq!(second.len(), 6);
 
         //choose a buffer which would require a memove
         let mut rdr = WordStream::<_, 9>::new(Cursor::new(bytes));

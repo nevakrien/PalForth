@@ -1,7 +1,8 @@
-use crate::lex::StackAllocator;
-use crate::input::InputStream;
+use crate::buildins::ret;
 use crate::Code;
+use crate::input::InputStream;
 use crate::lex::Lex;
+use crate::lex::StackAllocator;
 use crate::lex::StackAllocatorCheckPoint;
 use crate::types::SigError;
 use crate::types::SigItem;
@@ -12,20 +13,17 @@ pub struct CompContext<'me, 'lex> {
     pub lex: &'me mut Lex<'lex>,
     start: StackAllocatorCheckPoint,
     pub stack: SigStack<'lex>,
-    immidate_stack: SigStack< 'lex>,
+    immidate_stack: SigStack<'lex>,
     pub input: Option<&'me mut dyn InputStream>,
 }
 
 impl<'me, 'lex> CompContext<'me, 'lex> {
-    pub fn new(
-        lex: &'me mut Lex<'lex>,
-        input: Option<&'me mut dyn InputStream>,
-    ) -> Self {
+    pub fn new(lex: &'me mut Lex<'lex>, input: Option<&'me mut dyn InputStream>) -> Self {
         Self {
             start: lex.code_mem.check_point(),
             lex,
-            stack:SigStack::new(),
-            immidate_stack:SigStack::new(),
+            stack: SigStack::new(),
+            immidate_stack: SigStack::new(),
             input,
         }
     }
@@ -52,6 +50,11 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
         input_sig: &'lex [SigItem<'lex>],
         output_sig: &'lex [SigItem<'lex>],
     ) -> Result<(), ()> {
+        self.lex
+            .code_mem
+            .save(Code::basic(ret, 0))
+            .expect("out of code mem");
+
         let code = self.finalize_code()?;
         let runtime = RuntimeCode {
             exe: Exe::Outlined(code),
@@ -78,38 +81,35 @@ pub struct Word<'lex> {
 ///a moveble peice of code that may or may not be inlined
 ///for the most part inlined code should be reserved for buildins
 ///inlining derived words can be good but it requires the JIT to do double work
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Exe<'lex> {
-	///contains the code AND a ret terminator in the end
+    ///contains the code AND a ret terminator in the end
     Inlined(&'lex [Code]),
     Outlined(&'lex [Code]),
 }
 
 impl<'lex> Exe<'lex> {
-	pub fn inner_slice(&self)-> &'lex [Code]{
-		match self{
-			Exe::Inlined(s)|Exe::Outlined(s)=>s
-		}
-	}
+    pub fn inner_slice(&self) -> &'lex [Code] {
+        match self {
+            Exe::Inlined(s) | Exe::Outlined(s) => s,
+        }
+    }
 
-	pub fn code_ptr(&self)-> *const Code{
-		self.inner_slice().as_ptr()
-	}
+    pub fn code_ptr(&self) -> *const Code {
+        self.inner_slice().as_ptr()
+    }
 
-    pub fn save_to_alloc(&self,alloc:&mut StackAllocator<Code>){
-		match self{
-			Exe::Outlined(slice)=>{
-				alloc
-				.save(Code::word(slice))
-				.expect("out of code mem");
-			},
-			Exe::Inlined(slice) => {
-				for c in slice[..slice.len() - 1].iter() {
-					alloc.save(c.shallow_clone())
-					.expect("out of code mem");
-				}
-			}
-		};
+    pub fn save_to_alloc(&self, alloc: &mut StackAllocator<Code>) {
+        match self {
+            Exe::Outlined(slice) => {
+                alloc.save(Code::word(slice)).expect("out of code mem");
+            }
+            Exe::Inlined(slice) => {
+                for c in slice[..slice.len() - 1].iter() {
+                    alloc.save(c.shallow_clone()).expect("out of code mem");
+                }
+            }
+        };
     }
 }
 
@@ -128,15 +128,18 @@ impl<'lex> RuntimeCode<'lex> {
         unsafe { vm.execute_code(self.exe.code_ptr()) }
     }
 
-    pub fn save_to_alloc(&self,alloc:&mut StackAllocator<Code>){
-    	self.exe.save_to_alloc(alloc)
+    pub fn save_to_alloc(&self, alloc: &mut StackAllocator<Code>) {
+        self.exe.save_to_alloc(alloc)
     }
 
     ///# Safety
     ///the type stack must hold correct information
     ///other than that checks handle everything
     #[inline]
-    pub unsafe fn comp_run_checked<'comp>(&self, vm: &mut Vm<'_,'lex, '_>) -> Result<(), SigError<'lex>> {
+    pub unsafe fn comp_run_checked(
+        &self,
+        vm: &mut Vm<'_, 'lex, '_>,
+    ) -> Result<(), SigError<'lex>> {
         let comp = vm.comp.get_comp_crash();
 
         self.check_sig(&mut comp.immidate_stack)?;
@@ -147,7 +150,7 @@ impl<'lex> RuntimeCode<'lex> {
     }
 
     #[inline]
-    fn check_sig(&self, sig: &mut SigStack< 'lex>) -> Result<(), SigError<'lex>> {
+    fn check_sig(&self, sig: &mut SigStack<'lex>) -> Result<(), SigError<'lex>> {
         sig.call_sig(self.output_sig, self.input_sig)
     }
 }

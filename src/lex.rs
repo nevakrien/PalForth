@@ -63,7 +63,7 @@ impl<'lex> LexEasyMemory<'lex> {
     }
 }
 
-impl<'lex> Default for LexEasyMemory<'lex> {
+impl Default for LexEasyMemory<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -311,12 +311,8 @@ mod tests {
         assert_eq!(a4 % align_of::<[u64; 3]>(), 0, "array mis-aligned");
 
         /* ── near-exhaustion check: fill what’s left in 8-byte chunks ─ */
-        loop {
-            match arena.alloc::<u64>() {
-                Some(_) => continue,
-                None => break, // expected out-of-memory
-            }
-        }
+        while let Some(_) = arena.alloc::<u64>(){};
+
         assert!(arena.alloc::<u64>().is_none(), "OOM must remain OOM");
     }
 
@@ -593,36 +589,54 @@ fn test_string_delayed() {
     assert_eq!(s, &*delayed)
 }
 
-
 #[test]
-#[cfg( feature = "std")]
-fn test_lex_lifetimes(){
-    use crate::vm::CompMode;
+#[cfg(feature = "std")]
+fn test_lex_lifetimes() {
     use crate::input::WordStream;
-    use std::mem::ManuallyDrop;
-    use crate::ir::CompEasyMemory;
+    use crate::vm::CompMode;
+    use crate::ir::CompContext;
     use crate::vm::VmEasyMemory;
+    use core::mem::ManuallyDrop;
 
     let mut vm_mem = VmEasyMemory::<1024>::new();
     let mut lex_mem = LexEasyMemory::new();
-    let mut comp_mem = CompEasyMemory::<1024>::new();
 
-
-    let lex :&mut Lex=  &mut ManuallyDrop::new(lex_mem.make_lex());
+    let lex: &mut Lex = &mut ManuallyDrop::new(lex_mem.make_lex());
     let lex_p = lex as *mut _;
-    let lex = unsafe{&mut*lex_p};
+    let lex = unsafe { &mut *lex_p };
 
     let mut stream: WordStream<_, 1000> = WordStream::new(std::io::stdin());
 
     let mut vm = vm_mem.make_vm();
-    let mut comp = comp_mem.make_comp(lex);
-
-    comp.input = Some(&mut stream);
-
-    vm.comp=CompMode::Run(comp);
+    vm.comp = CompMode::Run(CompContext::new(lex,Some(&mut stream)));
 
     std::mem::drop(vm);
-    unsafe{
+    unsafe {
+        core::ptr::drop_in_place(lex_p);
+    }
+}
+
+#[test]
+fn test_lex_lifetimes_nostd() {
+    use crate::vm::CompMode;
+    use crate::ir::CompContext;
+    use crate::vm::VmEasyMemory;
+    use core::mem::ManuallyDrop;
+
+
+    let mut vm_mem = VmEasyMemory::<1024>::new();
+    let mut lex_mem = LexEasyMemory::new();
+
+    let lex: &mut Lex = &mut ManuallyDrop::new(lex_mem.make_lex());
+    let lex_p = lex as *mut _;
+    let lex = unsafe { &mut *lex_p };
+
+
+    let mut vm = vm_mem.make_vm();
+    vm.comp = CompMode::Run(CompContext::new(lex,None));
+
+    core::mem::drop(vm);
+    unsafe {
         core::ptr::drop_in_place(lex_p);
     }
 }

@@ -5,12 +5,10 @@
 // use pal_forth::lex::LexEasyMemory;
 // use pal_forth::vm::VmEasyMemory;
 
-
 // fn main() -> () {
 //     let mut vm_mem = VmEasyMemory::<1024>::new();
 //     let mut lex_mem = LexEasyMemory::new();
 //     let mut comp_mem = CompEasyMemory::<1024>::new();
-
 
 //     let mut lex = ManuallyDrop::new(lex_mem.make_lex());
 //     let mut vm = vm_mem.make_vm();

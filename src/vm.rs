@@ -1,8 +1,6 @@
-use crate::PalError;
-use crate::Box;
-use no_std_io::io::Write;
 use crate::DefualtLogger;
 use crate::PalData;
+use crate::PalError;
 use crate::buildins::unwrap_over;
 use crate::buildins::unwrap_under;
 use crate::ir::CompContext;
@@ -13,6 +11,7 @@ use core::mem::transmute;
 use core::ptr;
 use core::sync::atomic::AtomicPtr;
 use core::sync::atomic::Ordering;
+use no_std_io::io::Write;
 
 pub type BuildinFunc =
     for<'vm> unsafe extern "C-unwind" fn(*const Code, &mut Vm<'vm, '_, '_>) -> *const Code;
@@ -137,7 +136,7 @@ impl<const STACK_SIZE: usize> Default for VmEasyMemory<STACK_SIZE> {
     }
 }
 
-impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
+impl<const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -148,7 +147,7 @@ impl<'lex, const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
             data_stack: StackRef::from_slice(&mut self.data),
             return_stack: StackRef::from_slice(&mut self.rs),
             comp: CompMode::Task,
-            output:DefualtLogger::new_ref(),
+            output: DefualtLogger::new_ref(),
         }
     }
 }
@@ -159,8 +158,8 @@ pub enum CompMode<'comp, 'lex> {
     Comp(CompContext<'comp, 'lex>),
 }
 
-impl<'lex,'comp> CompMode<'comp,'lex> {
-    pub fn get_comp_crash<'b>(&'b mut self) -> &'b mut CompContext<'comp,'lex> {
+impl<'lex, 'comp> CompMode<'comp, 'lex> {
+    pub fn get_comp_crash<'b>(&'b mut self) -> &'b mut CompContext<'comp, 'lex> {
         match self {
             CompMode::Task => panic!("need compile time context to run immidate"),
             CompMode::Comp(comp) | CompMode::Run(comp) => comp,
@@ -168,77 +167,72 @@ impl<'lex,'comp> CompMode<'comp,'lex> {
     }
 }
 
-pub struct Vm<'me, 'lex,'comp> {
+pub struct Vm<'me, 'lex, 'comp> {
     pub param_stack: StackRef<'me, *mut PalData>,
     pub data_stack: StackRef<'me, PalData>,
     pub return_stack: StackRef<'me, *const Code>,
-    pub comp: CompMode<'comp,'lex>,
+    pub comp: CompMode<'comp, 'lex>,
     pub output: &'me mut dyn Write,
 }
 
 impl Vm<'_, '_, '_> {
     ///# Safety
     /// the VM is valid ie there was no switching of the stack or comp arbitrarily
-    pub unsafe fn respond_to_input<'a>(
-        &'a mut self,
-    ) -> Result<(), PalError<'a>> {
+    pub unsafe fn respond_to_input(&mut self) -> Result<(), PalError<'_>> {
         loop {
             match &mut self.comp {
                 CompMode::Task => todo!(),
                 CompMode::Run(comp) => {
-                	let Some(s) = comp
-	                	.input
-	                	.as_mut()
-	                	.expect("need input to respond")
-	                	.next_word()? 
-                	else {
-                		break
-                	};
+                    let Some(s) = comp
+                        .input
+                        .as_mut()
+                        .expect("need input to respond")
+                        .next_word()?
+                    else {
+                        break;
+                    };
 
-
-                	//# Safety
+                    //# Safety
                     // this is fine to do since s is not used in the Some case
                     // again we run into a core lifetime issue in rust where None and Some both borrow s
                     // even if s is only used in None
                     let sp = s as *const str;
-                    match comp.lex.words.get(s){
-                    	Some(word)=> unsafe {
-                        	word.runtime.clone().comp_run_checked(self)?;
-                    	},
-                    	//reborrow s since we did not call self
-                    	None => return Err(PalError::Missingword(unsafe{&*sp}))
+                    match comp.lex.words.get(s) {
+                        Some(word) => unsafe {
+                            word.runtime.clone().comp_run_checked(self)?;
+                        },
+                        //reborrow s since we did not call self
+                        None => return Err(PalError::Missingword(unsafe { &*sp })),
                     }
-
-
                 }
                 CompMode::Comp(comp) => {
                     let Some(s) = comp
-	                	.input
-	                	.as_mut()
-	                	.expect("need input to respond")
-	                	.next_word()? 
-                	else {
-                		break
-                	};
+                        .input
+                        .as_mut()
+                        .expect("need input to respond")
+                        .next_word()?
+                    else {
+                        break;
+                    };
 
-                	//# Safety
+                    //# Safety
                     // this is fine to do since s is not used in the Some case
                     // again we run into a core lifetime issue in rust where None and Some both borrow s
                     // even if s is only used in None
                     let sp = s as *const str;
-                	match comp.lex.words.get(s){
-                    	Some(word)=> {
-                    		if let Some(im) = word.immidate {
-		                        unsafe {
-		                            //no typecheck needed
-		                            self.execute_code(im)
-		                        }
-		                    } else {
-		                        comp.add_runtime_code(&word.runtime.clone())?;
-		                    }
-                    	}
-                    	//reborrow s since we did not call self
-                    	None => return Err(PalError::Missingword(unsafe{&*sp}))
+                    match comp.lex.words.get(s) {
+                        Some(word) => {
+                            if let Some(im) = word.immidate {
+                                unsafe {
+                                    //no typecheck needed
+                                    self.execute_code(im)
+                                }
+                            } else {
+                                comp.add_runtime_code(&word.runtime.clone())?;
+                            }
+                        }
+                        //reborrow s since we did not call self
+                        None => return Err(PalError::Missingword(unsafe { &*sp })),
                     }
                 }
             }

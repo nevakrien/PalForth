@@ -1,18 +1,18 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::types::SigError;
-use core::ptr::NonNull;
 use crate::vm::Code;
+use core::ptr::NonNull;
 use hashbrown::HashMap;
 
 extern crate alloc;
 pub use alloc::boxed::Box;
 
 #[cfg(feature = "std")]
-pub use std::io::{self,Write};
+pub use std::io::{self, Write};
 
 #[cfg(not(feature = "std"))]
-pub use no_std_io::io::{self,Write};
+pub use no_std_io::io::{self, Write};
 
 pub mod stack;
 
@@ -48,15 +48,19 @@ pub enum PalError<'a> {
     // StackOverFlow,
     SigError(SigError<'a>),
     Io(io::Error),
-    Missingword(&'a str)
+    Missingword(&'a str),
 }
 
-impl<'a> From<SigError<'a>> for PalError<'a>{
-fn from(s: SigError<'a>) -> Self { PalError::SigError(s) }
+impl<'a> From<SigError<'a>> for PalError<'a> {
+    fn from(s: SigError<'a>) -> Self {
+        PalError::SigError(s)
+    }
 }
 
-impl From<io::Error> for PalError<'_>{
-fn from(s: io::Error) -> Self { PalError::Io(s) }
+impl From<io::Error> for PalError<'_> {
+    fn from(s: io::Error) -> Self {
+        PalError::Io(s)
+    }
 }
 
 #[cfg(feature = "std")]
@@ -65,15 +69,14 @@ pub type DefualtLogger = StdOutLogger;
 #[cfg(not(feature = "std"))]
 pub type DefualtLogger = NulLogger;
 
-
 #[cfg(feature = "std")]
 pub struct StdOutLogger;
 
 #[cfg(feature = "std")]
-impl StdOutLogger{
-	pub fn new_ref<'a>()->&'a mut Self{
-		unsafe{&mut*NonNull::dangling().as_ptr()}
-	}
+impl StdOutLogger {
+    pub fn new_ref<'a>() -> &'a mut Self {
+        unsafe { &mut *NonNull::dangling().as_ptr() }
+    }
 }
 
 #[cfg(feature = "std")]
@@ -89,15 +92,19 @@ impl Write for StdOutLogger {
 }
 
 pub struct NulLogger;
-impl NulLogger{
-	pub fn new_ref<'a>()->&'a mut Self{
-		unsafe{&mut*NonNull::dangling().as_ptr()}
-	}
+impl NulLogger {
+    pub fn new_ref<'a>() -> &'a mut Self {
+        unsafe { &mut *NonNull::dangling().as_ptr() }
+    }
 }
 
-impl Write for NulLogger{
-#[inline]
-fn write(&mut self, s: &[u8]) -> Result<usize, io::Error> {Ok(s.len())}
-#[inline]
-fn flush(&mut self) -> Result<(), io::Error> {Ok(())}
+impl Write for NulLogger {
+    #[inline]
+    fn write(&mut self, s: &[u8]) -> Result<usize, io::Error> {
+        Ok(s.len())
+    }
+    #[inline]
+    fn flush(&mut self) -> Result<(), io::Error> {
+        Ok(())
+    }
 }

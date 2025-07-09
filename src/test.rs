@@ -1,4 +1,3 @@
-use no_std_io::io::Write;
 use crate::FALSE;
 use crate::PalData;
 use crate::TRUE;
@@ -14,6 +13,7 @@ use crate::vm::Code;
 use crate::vm::VmEasyMemory;
 use core::cell::UnsafeCell;
 use core::panic::AssertUnwindSafe;
+use no_std_io::io::Write;
 
 #[test]
 fn round_trip_inject() {
@@ -387,8 +387,9 @@ fn call_dyn_executes_target() {
     }
 }
 
-
 #[test]
-fn defualt_logger(){
-    crate::DefualtLogger::new_ref().write_all(b"\n!!!!hey I am logger!!!\n").unwrap()
+fn defualt_logger() {
+    crate::DefualtLogger::new_ref()
+        .write_all(b"\n!!!!hey I am logger!!!\n")
+        .unwrap()
 }
