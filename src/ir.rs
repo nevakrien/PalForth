@@ -13,7 +13,7 @@ pub struct CompContext<'me, 'lex> {
     pub lex: &'me mut Lex<'lex>,
     start: StackAllocatorCheckPoint,
     pub stack: SigStack<'lex>,
-    immidate_stack: SigStack<'lex>,
+    pub immidate_stack: SigStack<'lex>,
     pub input: Option<&'me mut dyn InputStream>,
 }
 
@@ -99,6 +99,10 @@ impl<'lex> Exe<'lex> {
         self.inner_slice().as_ptr()
     }
 
+    pub fn as_word(&self) -> Code {
+        Code::word_raw(self.code_ptr())
+    }
+
     pub fn save_to_alloc(&self, alloc: &mut StackAllocator<Code>) {
         match self {
             Exe::Outlined(slice) => {
@@ -115,7 +119,7 @@ impl<'lex> Exe<'lex> {
 
 #[derive(Debug, Clone)]
 pub struct RuntimeCode<'lex> {
-    exe: Exe<'lex>,
+    pub exe: Exe<'lex>,
     pub input_sig: &'lex [SigItem<'lex>],
     pub output_sig: &'lex [SigItem<'lex>],
 }
@@ -125,7 +129,7 @@ impl<'lex> RuntimeCode<'lex> {
     /// same as [`Vm::execute_code`]
     #[inline(always)]
     pub unsafe fn run(&self, vm: &mut Vm) {
-        unsafe { vm.execute_code(self.exe.code_ptr()) }
+        unsafe { vm.execute_code(&self.exe.as_word()) }
     }
 
     pub fn save_to_alloc(&self, alloc: &mut StackAllocator<Code>) {

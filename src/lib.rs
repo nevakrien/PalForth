@@ -20,6 +20,7 @@ pub mod buildins;
 pub mod input;
 pub mod ir;
 pub mod lex;
+pub mod sigs;
 pub mod types;
 pub mod vm;
 

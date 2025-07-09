@@ -99,6 +99,11 @@ impl<'lex> StackAlloc<'lex> {
     }
 
     #[inline]
+    pub fn save<T>(&mut self,t:T)->&'lex mut T {
+        self.alloc().expect("not enough comp mem").write(t)
+    }
+
+    #[inline]
     pub fn check_point(&self) -> StackAllocCheckPoint {
         StackAllocCheckPoint(self.0.len())
     }

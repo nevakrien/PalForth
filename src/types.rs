@@ -159,9 +159,16 @@ pub struct Type<'lex> {
     pub name: &'lex str,
 }
 
+#[repr(i32)]
+pub enum BasicType{
+    Int,
+    Bool,
+    Float,
+}
+
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum TypeInner<'lex> {
-    Basic,
+    Basic(i32),
     Alias(TypeP<'lex>, &'lex str),
     Array(TypeP<'lex>, Option<i32>),
     Cluster(DelayedSlice<'lex, TypeP<'lex>>),
@@ -174,7 +181,7 @@ impl<'lex> TypeInner<'lex> {
         }
 
         let (name, cells, size) = match self {
-            TypeInner::Basic => unreachable!("missing basic type in the table"),
+            TypeInner::Basic(_) => unreachable!("missing basic type in the table"),
             TypeInner::Alias(parent, name) => (*name, parent.cells, parent.size),
             TypeInner::Array(elem, num) => {
                 let mut writer = StackWriter::new(&mut lex.comp_data_mem);
@@ -490,20 +497,18 @@ impl<'lex> SigStack<'lex> {
 /* ───────────────────────── SIGSTACK TYPECHECK ───────────────────────── */
 
 /*──────────────────────── test helpers ───────────────────────*/
-#[cfg(test)]
-fn make_int<'lex>() -> Type<'lex> {
+pub fn make_int<'lex>() -> Type<'lex> {
     Type {
-        inner: TypeInner::Basic,
+        inner: TypeInner::Basic(BasicType::Int as i32),
         size: 4,
         cells: 1,
         name: "int",
     }
 }
 
-#[cfg(test)]
-fn make_float<'lex>() -> Type<'lex> {
+pub fn make_float<'lex>() -> Type<'lex> {
     Type {
-        inner: TypeInner::Basic,
+        inner: TypeInner::Basic(BasicType::Float as i32),
         size: 4,
         cells: 1,
         name: "float",
