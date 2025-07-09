@@ -19,13 +19,13 @@ pub const WRITE_FLAG: u8 = 0x2;
 ///as a bonus this gives us memcpy instead of memove and the ability to make some statments on thread safety
 pub const UNIQUE_FLAG: u8 = 0x4;
 
-///whether or not this stays on the output stack
-pub const OUTPUT_FLAG: u8 = 0x8;
+// ///whether or not this stays on the output stack
+// pub const OUTPUT_FLAG: u8 = 0x8;
 
 ///if set the value is passed on the data stack (this convention cant be easily automated) 
 pub const RAW_FLAG: u8 = 0x10;
 
-///only relvent for outputs if set the return pointer may be ANY pointer Derived!!! from the input (which has lifetime implications) this convention cant be easily automated
+///only relvent for outputs if set the return pointer may be ANY pointer!!! derived from the input (which has lifetime implications) this convention cant be easily automated
 pub const INDEX_FLAG: u8 = 0x20;
 
 ///whether or not this can be sent to another thread for read (non unique writbles can be made to read while actually not being sync)
@@ -74,6 +74,7 @@ pub enum SigError<'lex> {
         have: RwT,
     }, // cleaner and clearer
     MissingArgument(SigItem<'lex>),
+    OutputAsInput,
 }
 
 impl fmt::Display for SigError<'_> {
@@ -106,19 +107,19 @@ impl fmt::Display for SigError<'_> {
                     writeln!(f, "  - expected multi threaded access, but it's missing")?;
                 }
 
-                if clash & OUTPUT_FLAG != 0 {
-                    let actual = if have & OUTPUT_FLAG != 0 {
-                        "output"
-                    } else {
-                        "input"
-                    };
-                    let expected = if have & OUTPUT_FLAG != 0 {
-                        "input"
-                    } else {
-                        "output"
-                    };
-                    writeln!(f, "  - expected {}, but got {}", expected, actual)?;
-                }
+                // if clash & OUTPUT_FLAG != 0 {
+                //     let actual = if have & OUTPUT_FLAG != 0 {
+                //         "output"
+                //     } else {
+                //         "input"
+                //     };
+                //     let expected = if have & OUTPUT_FLAG != 0 {
+                //         "input"
+                //     } else {
+                //         "output"
+                //     };
+                //     writeln!(f, "  - expected {}, but got {}", expected, actual)?;
+                // }
 
                 if (clash & (RAW_FLAG | INDEX_FLAG)) != 0 {
                     let expected = AccessMode::from_bits(*clash);
@@ -138,6 +139,7 @@ impl fmt::Display for SigError<'_> {
                 Ok(())
             }
             SigError::MissingArgument(a) => write!(f, "Missing an argument of type {a}"),
+            SigError::OutputAsInput => write!(f, "Attempted to use an Output only var as an Input"),
         }
     }
 }
@@ -259,7 +261,7 @@ impl fmt::Display for SigItem<'_> {
         show_flag!(READ_FLAG, "read");
         show_flag!(WRITE_FLAG, "write");
         show_flag!(UNIQUE_FLAG, "unique");
-        show_flag!(OUTPUT_FLAG, "output");
+        // show_flag!(OUTPUT_FLAG, "output");
         show_flag!(RAW_FLAG, "raw");
         show_flag!(INDEX_FLAG, "index");
         show_flag!(SYNC_FLAG, "sync");
@@ -295,9 +297,9 @@ fn check_subset(have: RwT, sig: RwT) -> Result<(), SigError<'static>> {
         clash |= SYNC_FLAG;
     }
 
-    if (sig & OUTPUT_FLAG) != (have & OUTPUT_FLAG) {
-        clash |= OUTPUT_FLAG;
-    }
+    // if (sig & OUTPUT_FLAG) != (have & OUTPUT_FLAG) {
+    //     clash |= OUTPUT_FLAG;
+    // }
 
     if (sig & RAW_FLAG) != (have & RAW_FLAG) {
         clash |= RAW_FLAG;
@@ -314,50 +316,43 @@ fn check_subset(have: RwT, sig: RwT) -> Result<(), SigError<'static>> {
     }
 }
 
-pub fn use_box_as<'lex>(
-    box_var: &mut CompVar< 'lex>,
+pub fn use_var_as<'lex>(
+    var_var: &mut CompVar< 'lex>,
     sig: &SigItem<'lex>,
     borrows: &mut Vec<i32>,
 ) -> Result<(), SigError<'lex>> {
-    if box_var.tp as *const _ != sig.tp as *const _ {
+    if var_var.tp as *const _ != sig.tp as *const _ {
         return Err(SigError::WrongType {
-            found: box_var.tp,
+            found: var_var.tp,
             wanted: sig.tp,
         });
     }
-    check_subset(box_var.permissions, sig.permissions)?;
+    check_subset(var_var.permissions, sig.permissions)?;
 
-    if borrows[box_var.borrow_id] == -1 {
+    if borrows[var_var.borrow_id] == -1 {
         return Err(SigError::AlreadyBorrowed);
     }
-    if (sig.permissions & UNIQUE_FLAG != 0) && borrows[box_var.borrow_id] != 0 {
+    if (sig.permissions & UNIQUE_FLAG != 0) && borrows[var_var.borrow_id] != 0 {
         return Err(SigError::NeedsUnique);
     }
 
     if sig.permissions & UNIQUE_FLAG != 0 {
-        borrows[box_var.borrow_id]=-1;
+        borrows[var_var.borrow_id]=-1;
     } else {
-        borrows[box_var.borrow_id]+=1;
+        borrows[var_var.borrow_id]+=1;
     }
 
     Ok(())
 }
 
-pub fn free_box_use(box_var: &mut CompVar, sig: RwT,borrows: &mut Vec<i32>,) {
+pub fn free_var_use(var_var: &mut CompVar, sig: RwT,borrows: &mut Vec<i32>,) {
     if sig & UNIQUE_FLAG != 0 {
-        borrows[box_var.borrow_id]=0;
+        borrows[var_var.borrow_id]=0;
     } else {
         //num_borrowed--
-        borrows[box_var.borrow_id]-=1;
+        borrows[var_var.borrow_id]-=1;
     }
 }
-
-// pub struct SigStackView<'me,'lex>{
-//     cells_locals: i32,
-//     var_arena: *mut [CompVar<'lex>],
-//     borrows_arena: StackVec<'me, i32>,
-//     pub stack: StackRef<'me, VarId>,
-// }
 
 /// # Safety
 /// changing any of the underlying stacks is considered unsound
@@ -366,7 +361,8 @@ pub struct SigStack<'lex> {
     cells_locals: i32,
     var_arena: Vec<CompVar<'lex>>,
     borrows_arena: Vec<i32>,
-    pub stack: Vec<VarId>,
+    pub num_outputs:u32,
+    stack: Vec<VarId>,
 }
 
 impl Default for SigStack<'_>{
@@ -375,6 +371,7 @@ fn default() -> Self { Self{
     cells_locals:0,
     var_arena:Vec::with_capacity(16),
     borrows_arena:Vec::with_capacity(16),
+    num_outputs:0,
     stack:Vec::with_capacity(32),
 } }
 }
@@ -410,19 +407,26 @@ impl<'lex> SigStack<'lex> {
 
 
         //first consume all the inputs and outputs without poping
-        let mut stack = self.stack.iter().rev();
+        let mut stack = (&self.stack[self.num_outputs as usize..]).iter().rev();
 
         for t in inputs.iter().rev() {
             match stack.next() {
-                None => return Err(SigError::MissingArgument(*t)),
-                Some(id) => use_box_as(&mut self.var_arena[*id], t,&mut self.borrows_arena)?,
+                None => return {
+                    if self.num_outputs == 0 {
+                        Err(SigError::MissingArgument(*t))
+                    }else{
+                        Err(SigError::OutputAsInput)
+                    }
+                },
+                Some(id) => use_var_as(&mut self.var_arena[*id], t,&mut self.borrows_arena)?,
             };
         }
 
+        let mut stack = stack.chain((&self.stack[..self.num_outputs as usize]).iter().rev());
         for t in outputs.iter().rev() {
             match stack.next() {
                 None => return Err(SigError::MissingArgument(*t)),
-                Some(id) => use_box_as(&mut self.var_arena[*id], t ,&mut self.borrows_arena)?,
+                Some(id) => use_var_as(&mut self.var_arena[*id], t ,&mut self.borrows_arena)?,
             };
         }
 
@@ -430,26 +434,20 @@ impl<'lex> SigStack<'lex> {
 
         for t in inputs.iter().rev() {
             let id = self.stack.pop().unwrap();
-            free_box_use(&mut self.var_arena[id], t.permissions,&mut self.borrows_arena);
+            free_var_use(&mut self.var_arena[id], t.permissions,&mut self.borrows_arena);
             
         }
 
         let mut stack = self.stack.iter().rev();
         for t in outputs.iter().rev() {
             let id = stack.next().unwrap();
-            free_box_use(&mut self.var_arena[*id], t.permissions,&mut self.borrows_arena);
+            free_var_use(&mut self.var_arena[*id], t.permissions,&mut self.borrows_arena);
         }
         Ok(())
     }
 
-    pub fn is_only_outputs(&self) -> bool{
-        for id in self.stack.iter(){
-            if (self.var_arena[*id].permissions&OUTPUT_FLAG)==0 {
-                return false;
-            }
-        }
-
-        return true;
+    pub fn verify_end(&self)->bool{
+        self.stack.len()==self.num_outputs as usize
     }
 }
 

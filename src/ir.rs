@@ -39,7 +39,7 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
     ///verifies the stack is empty and returns the generated code
     #[inline]
     pub fn finalize_code(&self) -> Result<&'lex [Code], ()> {
-        if self.stack.is_only_outputs() {
+        if self.stack.verify_end() {
             Ok(self.lex.code_mem.index_checkpoint(self.start))
         } else {
             Err(())
