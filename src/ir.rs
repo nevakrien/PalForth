@@ -1,4 +1,3 @@
-use crate::types::SigStackEasyMemory;
 use crate::lex::StackAllocator;
 use crate::input::InputStream;
 use crate::Code;
@@ -12,23 +11,21 @@ use crate::vm::Vm;
 pub struct CompContext<'me, 'lex> {
     pub lex: &'me mut Lex<'lex>,
     start: StackAllocatorCheckPoint,
-    pub stack: SigStack<'me, 'lex>,
-    immidate_stack: SigStack<'me, 'lex>,
+    pub stack: SigStack<'lex>,
+    immidate_stack: SigStack< 'lex>,
     pub input: Option<&'me mut dyn InputStream>,
 }
 
 impl<'me, 'lex> CompContext<'me, 'lex> {
     pub fn new(
         lex: &'me mut Lex<'lex>,
-        stack: SigStack<'me, 'lex>,
-        immidate_stack: SigStack<'me, 'lex>,
         input: Option<&'me mut dyn InputStream>,
     ) -> Self {
         Self {
             start: lex.code_mem.check_point(),
             lex,
-            stack,
-            immidate_stack,
+            stack:SigStack::new(),
+            immidate_stack:SigStack::new(),
             input,
         }
     }
@@ -69,31 +66,6 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
         self.lex.words.insert(name, word);
         Ok(())
     }
-}
-
-#[derive(Default)]
-pub struct CompEasyMemory< 'lex, const STACK_SIZE: usize>{
-	stack:SigStackEasyMemory< 'lex,STACK_SIZE>,
-	immidate_stack:SigStackEasyMemory< 'lex,STACK_SIZE>,
-}
-
-
-impl< 'lex, const STACK_SIZE: usize> CompEasyMemory< 'lex,STACK_SIZE>{
-	pub fn new()->Self{
-		Self::default()
-	}
-	pub fn make_comp<'me>(&'me mut self,lex:&'me mut Lex<'lex>)->CompContext<'me,'lex>{
-		let start = lex.code_mem.check_point();
-
-		CompContext{
-			lex,
-			start,
-
-			immidate_stack:self.immidate_stack.make_sig_stack(),
-			stack:self.stack.make_sig_stack(),
-			input:None,
-		}
-	}
 }
 
 #[derive(Debug, Clone)]
@@ -175,7 +147,7 @@ impl<'lex> RuntimeCode<'lex> {
     }
 
     #[inline]
-    fn check_sig(&self, sig: &mut SigStack<'_, 'lex>) -> Result<(), SigError<'lex>> {
+    fn check_sig(&self, sig: &mut SigStack< 'lex>) -> Result<(), SigError<'lex>> {
         sig.call_sig(self.output_sig, self.input_sig)
     }
 }

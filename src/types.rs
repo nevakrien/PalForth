@@ -1,13 +1,9 @@
-use crate::stack::StackVec;
+use alloc::vec::Vec;
 use crate::lex::DelayedSlice;
 use crate::lex::Lex;
-use crate::lex::StackAllocator;
 use crate::lex::StackWriter;
-use crate::stack::StackRef;
-use crate::stack::make_storage;
 use core::fmt;
 use core::fmt::Write;
-use core::mem::MaybeUninit;
 
 
 pub type RwT = u8;
@@ -274,7 +270,7 @@ impl fmt::Display for SigItem<'_> {
 
 pub type VarId = usize;
 
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug,Clone)]
 pub struct CompVar<'lex> {
     pub tp: &'lex Type<'lex>,
     pub offset_from_start: i32,        // first local is 0
@@ -321,7 +317,7 @@ fn check_subset(have: RwT, sig: RwT) -> Result<(), SigError<'static>> {
 pub fn use_box_as<'lex>(
     box_var: &mut CompVar< 'lex>,
     sig: &SigItem<'lex>,
-    borrows: &mut StackVec<i32>,
+    borrows: &mut Vec<i32>,
 ) -> Result<(), SigError<'lex>> {
     if box_var.tp as *const _ != sig.tp as *const _ {
         return Err(SigError::WrongType {
@@ -347,7 +343,7 @@ pub fn use_box_as<'lex>(
     Ok(())
 }
 
-pub fn free_box_use(box_var: &mut CompVar, sig: RwT,borrows: &mut StackAllocator<i32>,) {
+pub fn free_box_use(box_var: &mut CompVar, sig: RwT,borrows: &mut Vec<i32>,) {
     if sig & UNIQUE_FLAG != 0 {
         borrows[box_var.borrow_id]=0;
     } else {
@@ -365,58 +361,28 @@ pub fn free_box_use(box_var: &mut CompVar, sig: RwT,borrows: &mut StackAllocator
 
 /// # Safety
 /// changing any of the underlying stacks is considered unsound
-pub struct SigStack<'me, 'lex> {
+#[derive(Clone)]
+pub struct SigStack<'lex> {
     cells_locals: i32,
-    var_arena: StackVec<'me, CompVar<'lex>>,
-    borrows_arena: StackVec<'me, i32>,
-    pub stack: StackRef<'me, VarId>,
+    var_arena: Vec<CompVar<'lex>>,
+    borrows_arena: Vec<i32>,
+    pub stack: Vec<VarId>,
 }
 
-impl<'me, 'lex> SigStack<'me, 'lex> {
-    ///sets the other stack panics on memory missing
-    pub fn set_other(&mut self,mut other:SigStack<'_,'lex>){
-        other.cells_locals=self.cells_locals;
-        self.var_arena.set_other(&mut other.var_arena).expect("overflow var arena");
-        self.borrows_arena.set_other(&mut other.borrows_arena).expect("overflow borrow arena");
-        self.stack.set_other(&mut other.stack).expect("overflow sigstack");
+impl Default for SigStack<'_>{
+
+fn default() -> Self { Self{
+    cells_locals:0,
+    var_arena:Vec::with_capacity(16),
+    borrows_arena:Vec::with_capacity(16),
+    stack:Vec::with_capacity(32),
+} }
+}
+
+impl<'lex> SigStack<'lex> {
+    pub fn new()->Self{
+        Self::default()
     }
-    
-    // pub fn use_mem<'other>(&'other mut self)->SigStack<'other,'lex>{
-    //     SigStack{
-    //         cells_locals:0,
-    //         var_arena:self.var_arena.split().1,
-    //         borrows_arena:self.borrows_arena.split().1,
-    //         stack:self.stack.split().1,
-    //     }
-    // }
-
-    // pub fn split_tail(&mut self)->SigStack<'me,'lex>{
-    //     //VARS
-    //     let mut mem : StackVec<'me,_> = StackVec::new_full(&mut []);
-    //     core::mem::swap(&mut mem,&mut self.var_arena);
-    //     let (mine,var_arena) = mem.split_consume();
-    //     self.var_arena = StackVec::new_full(mine);
-
-    //     //BOROWS
-    //     let mut mem : StackVec<'me,_> = StackVec::new_full(&mut []);
-    //     core::mem::swap(&mut mem,&mut self.borrows_arena);
-    //     let (mine,borrows_arena) = mem.split_consume();
-    //     self.borrows_arena = StackVec::new_full(mine);
-
-    //     //STACK
-    //     let mut mem : StackRef<'me,_> = StackRef::new_full(&mut []);
-    //     core::mem::swap(&mut mem,&mut self.stack);
-    //     let (mine,stack) = mem.split_consume();
-    //     self.stack = StackRef::new_full(mine);
-
-    //     SigStack{
-    //         cells_locals:0,
-    //         var_arena,
-    //         borrows_arena,
-    //         stack,
-    //     }
-    // }
-
     pub fn add_local(&mut self, tp: &'lex Type<'lex>) -> VarId {
         let var = CompVar {
             tp,
@@ -424,15 +390,13 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
             borrow_id:self.add_borrows(0),
             offset_from_start: self.cells_locals,
         };
-        self.var_arena.push(var.into()).expect("overflow var arena");
+        self.var_arena.push(var.into());
         self.cells_locals += tp.cells;
         self.var_arena.len()-1
     }
 
     pub fn add_borrows(&mut self, num: i32) -> usize {
-        self.borrows_arena
-            .push(num)
-            .expect("overflow borrow arena");
+        self.borrows_arena.push(num);
         self.borrows_arena.len()-1
     }
 
@@ -451,12 +415,12 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
         }
 
         //checkpoint here so outputs arent poped
-        let mut stack = StackRef::new_full(self.stack.split().0);
+        let mut stack = self.stack.iter().rev();
 
         for t in outputs.iter().rev() {
-            match stack.pop() {
+            match stack.next() {
                 None => return Err(SigError::MissingArgument(*t)),
-                Some(id) => use_box_as(&mut self.var_arena[id], t ,&mut self.borrows_arena)?,
+                Some(id) => use_box_as(&mut self.var_arena[*id], t ,&mut self.borrows_arena)?,
             };
         }
 
@@ -464,7 +428,7 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
     }
 
     pub fn is_only_outputs(&self) -> bool{
-        for id in self.stack.peek_all(){
+        for id in self.stack.iter(){
             if (self.var_arena[*id].permissions&OUTPUT_FLAG)==0 {
                 return false;
             }
@@ -474,37 +438,6 @@ impl<'me, 'lex> SigStack<'me, 'lex> {
     }
 }
 
-// Easy memory struct
-pub struct SigStackEasyMemory<'lex, const STACK_SIZE: usize> {
-    var_arena_mem: [MaybeUninit<CompVar<'lex>>; STACK_SIZE],
-    borrows_arena_mem: [MaybeUninit<i32>; STACK_SIZE],
-    stack_mem: [MaybeUninit<VarId>; STACK_SIZE],
-}
-
-impl<const STACK_SIZE: usize> Default for SigStackEasyMemory<'_, STACK_SIZE> {
-    fn default() -> Self {
-        Self {
-            var_arena_mem: make_storage(),
-            borrows_arena_mem: make_storage(),
-            stack_mem: make_storage(),
-        }
-    }
-}
-
-impl<'lex, const STACK_SIZE: usize> SigStackEasyMemory< 'lex, STACK_SIZE> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn make_sig_stack<'me>(&'me mut self) -> SigStack<'me, 'lex> {
-        SigStack {
-            cells_locals: 0,
-            var_arena: StackVec::from_slice(&mut self.var_arena_mem),
-            borrows_arena: StackVec::from_slice(&mut self.borrows_arena_mem),
-            stack: StackRef::from_slice(&mut self.stack_mem),
-        }
-    }
-}
 
 /* ───────────────────────── SIGSTACK TYPECHECK ───────────────────────── */
 
@@ -523,8 +456,7 @@ fn make_float<'lex>() -> Type<'lex> {
 fn sig_stack_success_case() {
     let (type_int, type_float) = (make_int(), make_float());
 
-    let mut mem = SigStackEasyMemory::<1024>::new();
-    let mut st  = mem.make_sig_stack();
+    let mut st  = SigStack::new();
 
     // int variable via helper
     let var1 = st.add_local(&type_int);
@@ -537,12 +469,11 @@ fn sig_stack_success_case() {
             offset_from_start: 1,
             borrow_id,
             permissions: READ_FLAG,
-        })
-        .unwrap();
+        });
     let var2 = st.var_arena.len() - 1;
 
-    st.stack.push(var1).unwrap();
-    st.stack.push(var2).unwrap();
+    st.stack.push(var1);
+    st.stack.push(var2);
 
     let inputs = [
         SigItem { tp: &type_int,   permissions: READ_FLAG },
@@ -558,12 +489,11 @@ fn sig_stack_success_case() {
 fn sig_stack_wrong_type_error() {
     let (type_int, type_float) = (make_int(), make_float());
 
-    let mut mem = SigStackEasyMemory::<1024>::new();
-    let mut st  = mem.make_sig_stack();
+    let mut st  = SigStack::new();
 
     // stack has an `int`
     let var1 = st.add_local(&type_int);
-    st.stack.push(var1).unwrap();
+    st.stack.push(var1);
 
     let inputs = [SigItem { tp: &type_float, permissions: READ_FLAG }];
     match st.call_sig(&[], &inputs).unwrap_err() {
@@ -581,8 +511,7 @@ fn sig_stack_wrong_type_error() {
 fn sig_stack_missing_argument_error() {
     let type_int = make_int();
 
-    let mut mem = SigStackEasyMemory::<1024>::new();
-    let mut st  = mem.make_sig_stack();
+    let mut st  = SigStack::new();
 
     let inputs = [SigItem { tp: &type_int, permissions: READ_FLAG }];
     match st.call_sig(&[], &inputs).unwrap_err() {
@@ -597,8 +526,7 @@ fn sig_stack_missing_argument_error() {
 fn sig_stack_permission_error() {
     let type_int = make_int();
 
-    let mut mem = SigStackEasyMemory::<1024>::new();
-    let mut st  = mem.make_sig_stack();
+    let mut st  = SigStack::new();
 
     // int variable, READ only
     let borrow_id = st.add_borrows(0);
@@ -608,10 +536,9 @@ fn sig_stack_permission_error() {
             offset_from_start: 0,
             borrow_id,
             permissions: READ_FLAG,
-        })
-        .unwrap();
+        });
     let var1 = st.var_arena.len() - 1;
-    st.stack.push(var1).unwrap();
+    st.stack.push(var1);
 
     let inputs = [SigItem { tp: &type_int, permissions: WRITE_FLAG }];
     match st.call_sig(&[], &inputs).unwrap_err() {
@@ -629,8 +556,7 @@ fn sig_stack_permission_error() {
 fn sig_stack_needs_unique_error() {
     let type_int = make_int();
 
-    let mut mem = SigStackEasyMemory::<1024>::new();
-    let mut st  = mem.make_sig_stack();
+    let mut st  = SigStack::new();
 
     // borrow count = 1  (already shared-borrowed)
     let borrow_id = st.add_borrows(1);
@@ -640,12 +566,11 @@ fn sig_stack_needs_unique_error() {
             offset_from_start: 0,
             borrow_id,
             permissions: READ_FLAG | UNIQUE_FLAG,
-        })
-        .unwrap();
+        });
     let var = st.var_arena.len() - 1;
 
-    st.stack.push(var).unwrap();
-    st.stack.push(var).unwrap();
+    st.stack.push(var);
+    st.stack.push(var);
 
     let inputs = [
         SigItem { tp: &type_int, permissions: UNIQUE_FLAG },
@@ -660,8 +585,7 @@ fn sig_stack_needs_unique_error() {
 fn sig_stack_already_borrowed_error() {
     let type_int = make_int();
 
-    let mut mem = SigStackEasyMemory::<1024>::new();
-    let mut st  = mem.make_sig_stack();
+    let mut st  = SigStack::new();
 
     // borrow count = -1  (currently unique-borrowed)
     let borrow_id = st.add_borrows(-1);
@@ -671,10 +595,9 @@ fn sig_stack_already_borrowed_error() {
             offset_from_start: 0,
             borrow_id,
             permissions: READ_FLAG | UNIQUE_FLAG,
-        })
-        .unwrap();
+        });
     let var = st.var_arena.len() - 1;
-    st.stack.push(var).unwrap();
+    st.stack.push(var);
 
     let inputs = [SigItem { tp: &type_int, permissions: READ_FLAG }];
     assert!(matches!(st.call_sig(&[], &inputs).unwrap_err(), SigError::AlreadyBorrowed));
