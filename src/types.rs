@@ -406,7 +406,7 @@ impl<'lex> SigStack<'lex> {
         &mut self.borrows_arena[idx]
     }
 
-    pub fn add_local(&mut self, tp: &'lex Type<'lex>) -> VarId {
+    pub fn add_owned_var(&mut self, tp: &'lex Type<'lex>) -> VarId {
         let var = CompVar {
             tp,
             permissions: WRITE_FLAG | READ_FLAG | UNIQUE_FLAG, //not sync since borrow checker would downcast to non unique sync
@@ -485,7 +485,13 @@ impl<'lex> SigStack<'lex> {
         }
 
         for id in self.stack.iter().rev() {
+            //no one is allowed to borrow since this will be droped
             if *self.get_borrow(*id) != 0 {
+                return false;
+            }
+
+            //every output must be inilized
+            if (self.get_var(*id).permissions & READ_FLAG) == 0 {
                 return false;
             }
         }
@@ -524,7 +530,7 @@ fn sig_stack_success_case() {
     let mut st = SigStack::new();
 
     // int variable via helper
-    let var1 = st.add_local(&type_int);
+    let var1 = st.add_owned_var(&type_int);
 
     // explicit float variable with custom permissions
     let borrow_id = st.add_borrows(0);
@@ -562,7 +568,7 @@ fn sig_stack_wrong_type_error() {
     let mut st = SigStack::new();
 
     // stack has an `int`
-    let var1 = st.add_local(&type_int);
+    let var1 = st.add_owned_var(&type_int);
     st.stack.push(var1);
 
     let inputs = [SigItem {

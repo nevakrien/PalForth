@@ -113,8 +113,8 @@ use crate::lex::LexEasyMemory;
 
     // --- type-checking --------------------------------------------------
     // Build a SigStack that reflects the two i64s we just pushed
-    let v1 = sig_stack.add_local(get_int_type(lex));
-    let v2 = sig_stack.add_local(get_int_type(lex));
+    let v1 = sig_stack.add_owned_var(get_int_type(lex));
+    let v2 = sig_stack.add_owned_var(get_int_type(lex));
     sig_stack.push(v1);
     sig_stack.push(v2);
 
@@ -145,7 +145,7 @@ use crate::lex::LexEasyMemory;
     let mut lex = lex_mem.make_lex();
 
     let mut sig_stack = SigStack::default();
-    let v = sig_stack.add_local(get_int_type(&mut lex));
+    let v = sig_stack.add_owned_var(get_int_type(&mut lex));
     sig_stack.push(v);          // Only one operand
 
     // Dummy lex just to build a wrapper
