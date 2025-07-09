@@ -80,7 +80,7 @@ pub unsafe extern "C-unwind" fn no_op(code_ptr: *const Code, _: &mut Vm) -> *con
     code_ptr
 }
 
-pub unsafe extern "C-unwind" fn log_bytes(code_ptr: *const Code, vm: &mut Vm) -> *const Code {
+pub unsafe extern "C-unwind" fn const_log_bytes(code_ptr: *const Code, vm: &mut Vm) -> *const Code {
     unsafe {
         let s = param(code_ptr) as *const *const [u8];
         vm.output.write_all(&**s).unwrap();
@@ -260,18 +260,6 @@ pub extern "C-unwind" fn ret(_: *const Code, _: &mut Vm) -> *const Code {
     core::ptr::null()
 }
 
-/* ───────────────── output ───────────────── */
-
-#[cfg(feature = "std")]
-pub unsafe extern "C-unwind" fn const_print(code_ptr: *const Code, _vm: &mut Vm) -> *const Code {
-    unsafe {
-        use std::ffi::CStr;
-
-        let cstr = CStr::from_ptr(param(code_ptr) as *const i8);
-        print!("{}", cstr.to_str().unwrap());
-        code_ptr
-    }
-}
 
 /* ───────────────── arithmetic helpers ───────────────── */
 

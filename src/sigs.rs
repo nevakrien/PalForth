@@ -1,3 +1,4 @@
+use crate::ir::Word;
 use crate::types::RwT;
 use crate::types::UNIQUE_FLAG;
 use crate::PalBool;
@@ -13,6 +14,59 @@ use crate::vm::BuildinFunc;
 use crate::Code;
 use crate::lex::Lex;
 use crate::types::BasicType;
+
+pub fn register_buildins<'lex>(lex: &mut Lex<'lex>) {
+    macro_rules! reg {
+        ($name:expr, $maker:expr) => {
+            {
+                let rt = $maker(lex);
+                let word = Word {
+                    name: $name,
+                    runtime: rt,
+                    immidate: None,
+                };
+                lex.words.insert(word.name, word);
+            }
+        };
+    }
+
+    // Integer binary ops
+    reg!("int_add", make_int_add);
+    reg!("int_sub", make_int_sub);
+    reg!("int_mul", make_int_mul);
+    reg!("int_div", make_int_div);
+    reg!("int_mod", make_int_mod);
+    reg!("int_shl", make_int_shl);
+    reg!("int_shr", make_int_shr);
+    reg!("int_and", make_int_and);
+    reg!("int_or",  make_int_or);
+    reg!("int_xor", make_int_xor);
+
+    // Integer comparisons
+    reg!("int_eq",      make_int_eq);
+    reg!("int_neq",     make_int_neq);
+    reg!("int_smaller", make_int_smaller);
+    reg!("int_bigger",  make_int_bigger);
+    reg!("int_le",      make_int_le);
+    reg!("int_ge",      make_int_ge);
+
+    // Boolean binary ops
+    reg!("bool_and", make_bool_and);
+    reg!("bool_or",  make_bool_or);
+    reg!("bool_xor", make_bool_xor);
+
+    reg!("bool_not", make_bool_not);
+
+
+    // Bool injects
+    reg!("bool_inject", make_bool_inject);
+    reg!("bool_inject_non_unique", make_bool_inject_non_unique);
+
+    // Int injects
+    reg!("int_inject", make_int_inject);
+    reg!("int_inject_non_unique", make_int_inject_non_unique);
+}
+
 
 pub fn get_int_type<'lex>(lex: &mut Lex<'lex>) -> &'lex Type<'lex> {
     intern_basic_type(lex, BasicType::Int as i32, "int", size_of::<PalInt>())
@@ -205,7 +259,7 @@ bin_bool_word!(make_bool_and, bool_and);
 bin_bool_word!(make_bool_or , bool_or );
 bin_bool_word!(make_bool_xor, bool_xor);
 
-pub fn make_bool_not<'lex>(lex: &mut Lex<'lex>, prim: BuildinFunc) -> RuntimeCode<'lex> {
+pub fn make_bool_not<'lex>(lex: &mut Lex<'lex>) -> RuntimeCode<'lex> where SigItem<'lex> : Copy{
     let tp = get_bool_type(lex);
     let outputs = lex
         .comp_data_mem
@@ -213,11 +267,11 @@ pub fn make_bool_not<'lex>(lex: &mut Lex<'lex>, prim: BuildinFunc) -> RuntimeCod
         .expect("out of comp mem")
         .leak();
 
-    RuntimeCode { exe: Exe::Inlined(add_buildin(lex, prim)), input_sig: &[], output_sig: outputs }
+    RuntimeCode { exe: Exe::Inlined(add_buildin(lex, crate::buildins::bool_not)), input_sig: &[], output_sig: outputs }
 }
 
 //-------------injects----------------------------
-pub fn make_assign_op<'lex>(lex: &mut Lex<'lex>,tp:&'lex Type<'lex>,permissions:RwT, prim: BuildinFunc) -> RuntimeCode<'lex> {
+pub fn make_assign_op<'lex>(lex: &mut Lex<'lex>,tp:&'lex Type<'lex>,permissions:RwT, prim: BuildinFunc) -> RuntimeCode<'lex> where SigItem<'lex> : Copy{
     let outputs = lex
         .comp_data_mem
         .save([SigItem { tp, permissions }])
@@ -253,7 +307,7 @@ bin_assign_word!(make_int_inject_non_unique,get_int_type, WRITE_FLAG,inject_non_
 /*──────────────────────── tests for the new wrapper families ─────────────────────*/
 
 #[cfg(test)]
-mod wrapper_family_tests {
+mod sig_tests {
     use crate::types::SigStack;
 use super::*;
     use crate::{
@@ -438,7 +492,7 @@ use super::*;
         let lex_p = lex as *mut _;
         let lex   = unsafe { &mut *lex_p };
 
-        let rc  = make_bool_not(lex, crate::buildins::bool_not);
+        let rc  = make_bool_not(lex);
         let ctx = CompContext::new(lex, None);
 
         let mut vm  = vm_mem.make_vm();
