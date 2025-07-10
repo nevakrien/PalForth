@@ -70,6 +70,7 @@ impl Default for LexEasyMemory<'_> {
     }
 }
 
+#[derive(Debug,PartialEq,Eq,Hash)]
 pub struct RefBox<'a,T:?Sized>{
     ptr:*mut T,
     _ph:PhantomData<&'a mut T>,

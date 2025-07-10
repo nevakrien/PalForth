@@ -1,6 +1,7 @@
 //this module has a lot of raw pointers betterbe explicit
 #![allow(clippy::needless_lifetimes)]
 
+use crate::lex::RefBox;
 use core::fmt::Write;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
@@ -221,9 +222,7 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
     #[inline]
-    pub fn pop_many<'b>(&'b mut self, n: usize) -> Option<&'b mut [T]>
-    where
-        T: Copy,
+    pub fn pop_many<'b>(&'b mut self, n: usize) -> Option<RefBox<'b,[T]>>
     {
         if self.write_index() < n {
             return None;
@@ -231,7 +230,7 @@ impl<'mem, T> StackRef<'mem, T> {
         unsafe {
             let p = self.head;
             self.head = self.head.add(n);
-            Some(slice::from_raw_parts_mut(p, n))
+            Some(RefBox::new(slice::from_raw_parts_mut(p, n)))
         }
     }
 
