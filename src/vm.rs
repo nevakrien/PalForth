@@ -4,7 +4,7 @@ use crate::PalError;
 use crate::buildins::unwrap_over;
 use crate::buildins::unwrap_under;
 use crate::ir::CompContext;
-use crate::stack::StackRef;
+use crate::stack::DownStack;
 use crate::stack::make_storage;
 use core::mem::MaybeUninit;
 use core::mem::transmute;
@@ -143,9 +143,9 @@ impl<const STACK_SIZE: usize> VmEasyMemory<STACK_SIZE> {
 
     pub fn make_vm(&mut self) -> Vm<'_, '_, '_> {
         Vm {
-            param_stack: StackRef::from_slice(&mut self.param),
-            data_stack: StackRef::from_slice(&mut self.data),
-            return_stack: StackRef::from_slice(&mut self.rs),
+            param_stack: DownStack::from_slice(&mut self.param),
+            data_stack: DownStack::from_slice(&mut self.data),
+            return_stack: DownStack::from_slice(&mut self.rs),
             comp: CompMode::Task,
             output: DefualtLogger::new_ref(),
         }
@@ -168,9 +168,9 @@ impl<'lex, 'comp> CompMode<'comp, 'lex> {
 }
 
 pub struct Vm<'me, 'lex, 'comp> {
-    pub param_stack: StackRef<'me, *mut PalData>,
-    pub data_stack: StackRef<'me, PalData>,
-    pub return_stack: StackRef<'me, *const Code>,
+    pub param_stack: DownStack<'me, *mut PalData>,
+    pub data_stack: DownStack<'me, PalData>,
+    pub return_stack: DownStack<'me, *const Code>,
     pub comp: CompMode<'comp, 'lex>,
     pub output: &'me mut dyn Write,
 }

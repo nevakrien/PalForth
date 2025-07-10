@@ -33,7 +33,7 @@ pub struct StackCheckPoint<T>(*mut T);
 ///     │     └─ head      
 ///     └──────── end (low addr)
 /// ```
-pub struct StackRef<'mem, T> {
+pub struct DownStack<'mem, T> {
     //the fact rust is missing const makes this make less effishent code than i would like...
     above: *mut T, // one-past the *highest* live element
     head: *mut T,  // next pop / current top (lowest live element)
@@ -41,11 +41,11 @@ pub struct StackRef<'mem, T> {
     _ph: PhantomData<&'mem mut [MaybeUninit<T>]>,
 }
 
-unsafe impl<'m, T: Send> Send for StackRef<'m, T> {}
-unsafe impl<'m, T: Sync> Sync for StackRef<'m, T> {}
+unsafe impl<'m, T: Send> Send for DownStack<'m, T> {}
+unsafe impl<'m, T: Sync> Sync for DownStack<'m, T> {}
 
 /*──────────────────── constructors ────────────────────*/
-impl<'mem, T> StackRef<'mem, T> {
+impl<'mem, T> DownStack<'mem, T> {
     /// Empty stack over an *uninitialised* slice.
     #[inline]
     pub const fn from_slice(buf: &'mem mut [MaybeUninit<T>]) -> Self {
@@ -97,7 +97,7 @@ impl<'mem, T> StackRef<'mem, T> {
         }
     }
 
-    pub fn set_other<'b>(&self, other: &mut StackRef<'b, T>) -> Result<(), usize>
+    pub fn set_other<'b>(&self, other: &mut DownStack<'b, T>) -> Result<(), usize>
     where
         T: Clone,
     {
@@ -357,10 +357,10 @@ impl<'mem, T> StackRef<'mem, T> {
 
     /// (live slice on the left, empty stack on the right)
     #[inline]
-    pub fn split<'b>(&'b mut self) -> (&'b mut [T], StackRef<'b, T>) {
+    pub fn split<'b>(&'b mut self) -> (&'b mut [T], DownStack<'b, T>) {
         let live = self.write_index();
         let left = unsafe { slice::from_raw_parts_mut(self.head, live) };
-        let right = StackRef {
+        let right = DownStack {
             above: self.head,
             head: self.head,
             end: self.end,
@@ -370,10 +370,10 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 
     #[inline]
-    pub fn split_consume(self) -> (&'mem mut [T], StackRef<'mem, T>) {
+    pub fn split_consume(self) -> (&'mem mut [T], DownStack<'mem, T>) {
         let live = self.write_index();
         let left = unsafe { slice::from_raw_parts_mut(self.head, live) };
-        let right = StackRef {
+        let right = DownStack {
             above: self.head,
             head: self.head,
             end: self.end,
@@ -384,9 +384,9 @@ impl<'mem, T> StackRef<'mem, T> {
 
     /// Raw pointer to live slice + empty right-hand stack (no borrow).
     #[inline]
-    pub fn split_raw(&mut self) -> (*mut T, StackRef<'_, T>) {
+    pub fn split_raw(&mut self) -> (*mut T, DownStack<'_, T>) {
         let ptr_live = self.head;
-        let right = StackRef {
+        let right = DownStack {
             above: self.head,
             head: self.head,
             end: self.end,
@@ -401,14 +401,14 @@ impl<'mem, T> StackRef<'mem, T> {
     }
 }
 /*──────────────────── iterator ─────────────────────────*/
-impl<T> Iterator for StackRef<'_, T> {
+impl<T> Iterator for DownStack<'_, T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.pop()
     }
 }
 
-impl<T> Index<usize> for StackRef<'_, T> {
+impl<T> Index<usize> for DownStack<'_, T> {
     type Output = T;
     fn index<'a>(&'a self, id: usize) -> &'a T {
         if self.len() <= id {
@@ -418,7 +418,7 @@ impl<T> Index<usize> for StackRef<'_, T> {
     }
 }
 
-impl<T> IndexMut<usize> for StackRef<'_, T> {
+impl<T> IndexMut<usize> for DownStack<'_, T> {
     fn index_mut<'a>(&'a mut self, id: usize) -> &'a mut T {
         if self.len() <= id {
             panic!("out of bound index");
@@ -430,7 +430,7 @@ impl<T> IndexMut<usize> for StackRef<'_, T> {
 #[test]
 fn test_index_and_index_mut_basic() {
     let mut storage = make_storage::<u32, 4>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     for v in 1..=3 {
         stack.push(v).unwrap();
@@ -456,7 +456,7 @@ fn test_index_out_of_bounds_panics() {
     use std::panic;
 
     let mut storage = make_storage::<u8, 2>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
     stack.push(10).unwrap(); // len = 1
 
     // Accessing idx 1 should panic
@@ -469,7 +469,7 @@ fn test_index_out_of_bounds_panics() {
 #[test]
 fn test_lifo_order() {
     let mut storage = make_storage::<&'static str, 3>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     stack.push("first").unwrap();
     stack.push("second").unwrap();
@@ -485,7 +485,7 @@ fn test_lifo_order() {
 #[test]
 fn test_peek_n() {
     let mut storage = make_storage::<u32, 5>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     for v in 1..=5 {
         stack.push(v).unwrap();
@@ -507,7 +507,7 @@ fn test_peek_n() {
 #[test]
 fn test_peek_many() {
     let mut storage = make_storage::<u32, 6>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     for i in 1..=5 {
         stack.push(i).unwrap();
@@ -526,7 +526,7 @@ fn test_peek_many() {
 #[test]
 fn test_push_n_and_pop_n_success() {
     let mut storage = make_storage::<u32, 6>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     let arr1 = [10, 20];
     let arr2 = [30, 40, 50];
@@ -542,7 +542,7 @@ fn test_push_n_and_pop_n_success() {
 #[test]
 fn test_push_n_overflow() {
     let mut storage = make_storage::<u32, 4>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     let ok = [1, 2];
     let fail = [3, 4, 5];
@@ -554,7 +554,7 @@ fn test_push_n_overflow() {
 #[test]
 fn test_pop_n_underflow() {
     let mut storage = make_storage::<u32, 3>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     stack.push(1).unwrap();
     assert!(stack.pop_n::<2>().is_none());
@@ -565,7 +565,7 @@ fn test_pop_n_underflow() {
 #[test]
 fn test_mixed_push_pop_n() {
     let mut storage = make_storage::<u32, 6>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     stack.push_n([1, 2, 3]).unwrap();
     stack.push(4).unwrap();
@@ -580,7 +580,7 @@ fn test_mixed_push_pop_n() {
 #[test]
 fn test_slice_conversion_basic() {
     let mut storage = make_storage::<u32, 4>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     assert_eq!(stack.pop(), None);
 
@@ -591,7 +591,7 @@ fn test_slice_conversion_basic() {
     assert_eq!(idx, 2);
 
     let slice = stack.to_slice();
-    let mut stack = StackRef::from_slice(slice);
+    let mut stack = DownStack::from_slice(slice);
     unsafe { stack.set_write_index(idx) };
 
     assert_eq!(stack.pop(), Some(20));
@@ -602,7 +602,7 @@ fn test_slice_conversion_basic() {
 #[test]
 fn test_split_stack() {
     let mut storage = make_storage::<u32, 6>();
-    let mut original = StackRef::from_slice(&mut storage);
+    let mut original = DownStack::from_slice(&mut storage);
 
     original.push(1).unwrap();
     original.push(2).unwrap();
@@ -620,7 +620,7 @@ fn test_split_stack() {
 #[test]
 fn test_push_slice_success_and_error() {
     let mut storage = make_storage::<u32, 5>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     let input1 = [1, 2, 3];
     assert_eq!(stack.push_slice(&input1), Some(()));
@@ -642,7 +642,7 @@ fn test_push_slice_success_and_error() {
 #[test]
 fn test_weird_write_error() {
     let mut storage = make_storage::<i64, 6>();
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     stack.push_slice(&[2]).unwrap();
     stack.push_n([1]).unwrap();
@@ -656,7 +656,7 @@ fn test_weird_write_error() {
 #[test]
 fn test_full_usage() {
     let mut data = [10, 20, 30, 40, 50, 60];
-    let mut stack = StackRef::new_full(&mut data);
+    let mut stack = DownStack::new_full(&mut data);
 
     assert_eq!(stack.write_index(), 6);
     assert_eq!(stack.room_left(), 0);
@@ -692,7 +692,7 @@ fn test_full_usage() {
 #[test]
 fn test_drop_in() {
     let mut data = [10, 20, 30, 40, 50, 60];
-    let mut stack = StackRef::new_full(&mut data);
+    let mut stack = DownStack::new_full(&mut data);
 
     assert_eq!(stack.write_index(), 6);
     assert_eq!(stack.room_left(), 0);
@@ -726,7 +726,7 @@ fn test_drop_in() {
 fn test_drop_inside_skip_zero_should_remove_top_items() {
     // stack top-to-bottom: 10 20 30 40
     let mut data = [10, 20, 30, 40];
-    let mut stack = StackRef::new_full(&mut data);
+    let mut stack = DownStack::new_full(&mut data);
 
     // Ask to drop the top two (10,20)
     stack.drop_inside(0, 2).unwrap();
@@ -749,7 +749,7 @@ fn test_zero_capacity_stack() {
     use core::mem::MaybeUninit;
 
     let mut storage: [MaybeUninit<u32>; 0] = [];
-    let mut stack = StackRef::from_slice(&mut storage);
+    let mut stack = DownStack::from_slice(&mut storage);
 
     assert_eq!(stack.write_index(), 0);
     assert_eq!(stack.room_left(), 0);
@@ -772,8 +772,8 @@ fn test_stacref_set_other_copies_all() {
     let mut buf1 = make_storage::<i32, 6>();
     let mut buf2 = make_storage::<i32, 4>();
 
-    let mut src = StackRef::from_slice(&mut buf1);
-    let mut dst = StackRef::from_slice(&mut buf2);
+    let mut src = DownStack::from_slice(&mut buf1);
+    let mut dst = DownStack::from_slice(&mut buf2);
 
     for v in 1..=3 {
         src.push(v).unwrap();
@@ -1254,7 +1254,7 @@ mod tests {
 /*────────── OS STACK ──────────*/
 
 #[cfg(all(unix, feature = "std"))]
-pub unsafe fn new_os_stack<T>() -> Option<StackRef<'static, T>> {
+pub unsafe fn new_os_stack<T>() -> Option<DownStack<'static, T>> {
     unsafe {
         use libc::{
             _SC_PAGESIZE, MAP_ANON, MAP_GROWSDOWN, MAP_PRIVATE, MAP_STACK, PROT_READ, PROT_WRITE,
@@ -1281,7 +1281,7 @@ pub unsafe fn new_os_stack<T>() -> Option<StackRef<'static, T>> {
         let total_elems = size / std::mem::size_of::<T>();
         let guard_elems = page_size / std::mem::size_of::<T>();
 
-        Some(StackRef {
+        Some(DownStack {
             above: typed_ptr.add(total_elems),
             head: typed_ptr.add(total_elems),
             end: typed_ptr.add(guard_elems), // dynamic expansion
@@ -1316,7 +1316,7 @@ fn test_stack_grows_down_on_access() {
 }
 
 #[cfg(all(windows, feature = "std"))]
-pub unsafe fn new_os_stack<T>() -> Option<StackRef<'static, T>> {
+pub unsafe fn new_os_stack<T>() -> Option<DownStack<'static, T>> {
     unsafe {
         use std::ptr::null_mut;
         use winapi::um::memoryapi::{VirtualAlloc, VirtualProtect};
@@ -1336,7 +1336,7 @@ pub unsafe fn new_os_stack<T>() -> Option<StackRef<'static, T>> {
         let total_elems = size / std::mem::size_of::<T>();
         let guard_elems = guard_size / std::mem::size_of::<T>();
 
-        Some(StackRef {
+        Some(DownStack {
             above: ptr.add(total_elems),
             head: ptr.add(total_elems),
             end: ptr.add(guard_elems),
