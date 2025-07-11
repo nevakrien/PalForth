@@ -117,9 +117,6 @@ fn deref_mut(&mut self) -> &mut T { unsafe{&mut *self.ptr.as_ptr()} }
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
 pub struct StackAlloc<'a>(StackVec<'a, u8>);
 
-#[derive(Debug, Clone, Copy)]
-pub struct StackAllocCheckPoint(usize); // logical length at CP
-
 impl<'lex> StackAlloc<'lex> {
     #[inline]
     pub const fn from_slice(raw: &'lex mut [MaybeUninit<u8>]) -> Self {
@@ -187,15 +184,15 @@ impl<'lex> StackAlloc<'lex> {
 
 
     #[inline]
-    pub fn check_point(&self) -> StackAllocCheckPoint {
-        StackAllocCheckPoint(self.0.len())
+    pub fn check_point(&self) -> usize {
+        self.0.len()
     }
 
     /// # Safety
     /// No references into the region above the checkpoint may still be live.
     #[inline]
-    pub unsafe fn goto_checkpoint(&mut self, cp: StackAllocCheckPoint) {
-        let to_free = self.0.len() - cp.0;
+    pub unsafe fn goto_checkpoint(&mut self, cp: usize) {
+        let to_free = self.0.len() - cp;
         // Everything here is plain bytes, so dropping isn’t required.
         self.0.free(to_free).expect("checkpoint math is wrong");
     }
@@ -243,15 +240,13 @@ impl<'me, 'lex> StackWriter<'me, 'lex> {
 
     #[inline]
     pub fn discard(self) {
-        unsafe { self.alloc.goto_checkpoint(StackAllocCheckPoint(self.start)) }
+        unsafe { self.alloc.goto_checkpoint(self.start) }
     }
 }
 
 // ───────────── STACK ALLOC (typed) ─────────────────────────────────────
 pub struct StackAllocator<'a, T>(StackVec<'a, T>);
 
-#[derive(Debug, Clone, Copy)]
-pub struct StackAllocatorCheckPoint(usize); // length in elements
 
 impl<'a, T> StackAllocator<'a, T> {
     #[inline]
@@ -278,29 +273,29 @@ impl<'a, T> StackAllocator<'a, T> {
     }
 
     #[inline]
-    pub fn check_point(&self) -> StackAllocatorCheckPoint {
-        StackAllocatorCheckPoint(self.0.len())
+    pub fn check_point(&self) -> usize {
+        self.0.len()
     }
 
     #[inline]
-    pub fn try_index_checkpoint(&self, cp: StackAllocatorCheckPoint) -> Option<&'a [T]> {
-        let live = self.0.len() - cp.0;
+    pub fn get(&self, cp: usize) -> Option<&'a [T]> {
+        let live = self.0.len() - cp;
         let addr = self.0.peek_many(live)?.as_ptr().addr();
         let p = self.0.peek_raw()?.with_addr(addr);
         unsafe { Some(slice::from_raw_parts(p, live)) }
     }
 
     #[inline]
-    pub fn index_checkpoint(&self, cp: StackAllocatorCheckPoint) -> &'a [T] {
-        self.try_index_checkpoint(cp)
+    pub fn index_checkpoint(&self, cp: usize) -> &'a [T] {
+        self.get(cp)
             .expect("checkpoint math is wrong")
     }
 
     /// # Safety
     /// No live references into the abandoned tail may survive.
     #[inline]
-    pub unsafe fn goto_checkpoint(&mut self, cp: StackAllocatorCheckPoint) {
-        let live = self.0.len() - cp.0;
+    pub unsafe fn goto_checkpoint(&mut self, cp: usize) {
+        let live = self.0.len() - cp;
         self.0.flush(live).expect("checkpoint math is wrong"); // drop each value
     }
 

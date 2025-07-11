@@ -3,7 +3,6 @@ use crate::Code;
 use crate::input::InputStream;
 use crate::lex::Lex;
 use crate::lex::StackAllocator;
-use crate::lex::StackAllocatorCheckPoint;
 use crate::types::SigError;
 use crate::types::SigItem;
 use crate::types::SigStack;
@@ -11,7 +10,7 @@ use crate::vm::Vm;
 
 pub struct CompContext<'me, 'lex> {
     pub lex: &'me mut Lex<'lex>,
-    start: StackAllocatorCheckPoint,
+    start: usize,
     pub stack: SigStack<'lex>,
     pub immidate_stack: SigStack<'lex>,
     pub input: Option<&'me mut dyn InputStream>,
