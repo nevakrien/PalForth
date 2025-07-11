@@ -20,7 +20,10 @@ pub fn make_storage<T, const N: usize>() -> [MaybeUninit<T>; N] {
 pub struct StackCheckPoint<T>(*mut T);
 
 /*──────────────────── stack type ───────────────────────*/
-
+/// This struct is supposed to be used when a stack in the traditional sense is needed.
+/// It is slightly more effishent to grow down on some arches and for some ops.
+/// Note that it does not deref the internal slice and thus it is sound to alias internal memory
+///
 /// A **down-growing** fixed-capacity LIFO stack.
 ///
 /// Layout (high address at the top):
@@ -43,6 +46,12 @@ pub struct DownStack<'mem, T> {
 
 unsafe impl<'m, T: Send> Send for DownStack<'m, T> {}
 unsafe impl<'m, T: Sync> Sync for DownStack<'m, T> {}
+
+impl<T> Drop for DownStack<'_, T> {
+    fn drop(&mut self) {
+        while let Some(_) = self.pop(){}
+    }
+}
 
 /*──────────────────── constructors ────────────────────*/
 impl<'mem, T> DownStack<'mem, T> {
@@ -90,10 +99,12 @@ impl<'mem, T> DownStack<'mem, T> {
 
     /// Convert back to the original uninitialised slice.
     #[inline]
-    pub const fn to_slice(self) -> &'mem mut [MaybeUninit<T>] {
+    pub fn to_slice(self) -> &'mem mut [MaybeUninit<T>] {
         unsafe {
             let len = self.above.offset_from(self.end) as usize;
-            from_raw_parts_mut(self.end as *mut _, len)
+            let end = self.end as *mut _;
+            core::mem::forget(self);
+            from_raw_parts_mut(end, len)
         }
     }
 
@@ -316,6 +327,35 @@ impl<'mem, T> DownStack<'mem, T> {
     #[inline]
     pub fn peek_all<'b>(&'b self) -> &'b [T] {
         unsafe { slice::from_raw_parts(self.head, self.write_index()) }
+    }
+
+
+    #[inline]
+    pub fn peek_mut<'b>(&'b mut self) -> Option<&'b mut T> {
+        self.peek_n_mut::<1>().map(|a| &mut a[0])
+    }
+
+    #[inline]
+    pub fn peek_n_mut<'b, const N: usize>(&'b mut self) -> Option<&'b mut [T; N]> {
+        if self.write_index() < N {
+            None
+        } else {
+            unsafe { Some(&mut *(self.head as *mut [T; N])) }
+        }
+    }
+
+    #[inline]
+    pub fn peek_many_mut<'b>(&'b mut self, n: usize) -> Option<&'b mut [T]> {
+        if self.write_index() < n {
+            None
+        } else {
+            unsafe { Some(slice::from_raw_parts_mut(self.head, n)) }
+        }
+    }
+
+    #[inline]
+    pub fn peek_all_mut<'b>(&'b mut self) -> &'b mut [T] {
+        unsafe { slice::from_raw_parts_mut(self.head, self.write_index()) }
     }
 
     #[inline]
@@ -909,6 +949,20 @@ impl<'me, T> StackVec<'me, T> {
         unsafe { Some((self.base.add(self.len) as *mut [T; N]).read()) }
     }
 
+
+    #[inline]
+    pub fn pop_many<'b>(&'b mut self, n: usize) -> Option<RefBox<'b,[T]>> {
+        if self.len < n {
+            None
+        } else {
+            unsafe {
+                let base = self.base.add(self.len - n);
+                self.len -= n;
+                Some(RefBox::new(slice::from_raw_parts_mut(base, n)))
+            }
+        }
+    }
+
     #[inline]
     pub fn push_slice(&mut self, src: &[T]) -> Option<()>
     where
@@ -1001,7 +1055,7 @@ impl<'me, T> StackVec<'me, T> {
     }
 
     #[inline]
-    pub fn peek_mut(&self) -> Option<&mut T> {
+    pub fn peek_mut(&mut self) -> Option<&mut T> {
         if self.len == 0 {
             None
         } else {
@@ -1010,7 +1064,7 @@ impl<'me, T> StackVec<'me, T> {
     }
 
     #[inline]
-    pub fn peek_many_mut(&self, n: usize) -> Option<&[T]> {
+    pub fn peek_many_mut(&mut self, n: usize) -> Option<&mut [T]> {
         if self.len < n {
             None
         } else {
@@ -1019,6 +1073,11 @@ impl<'me, T> StackVec<'me, T> {
                 Some(slice::from_raw_parts_mut(self.base.add(self.len - n), n))
             }
         }
+    }
+
+    #[inline]
+    pub fn peek_all_mut<'b>(&'b mut self) -> &'b mut [T] {
+        unsafe { slice::from_raw_parts_mut(self.base, self.len) }
     }
 
     /// Raw pointer to the current top (no lifetime).

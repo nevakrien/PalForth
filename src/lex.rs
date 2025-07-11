@@ -1,3 +1,4 @@
+use std::ptr::NonNull;
 use core::ops::DerefMut;
 use crate::Code;
 use crate::PalHash;
@@ -72,20 +73,25 @@ impl Default for LexEasyMemory<'_> {
 
 #[derive(Debug,PartialEq,Eq,Hash)]
 pub struct RefBox<'a,T:?Sized>{
-    ptr:*mut T,
+    ptr:NonNull<T>,
     _ph:PhantomData<&'a mut T>,
 }
+
+unsafe impl<'m,T> Send for RefBox<'m, T> where Box<T> : Send{}
+unsafe impl<'m, T> Sync for RefBox<'m, T> where Box<T> : Sync{}
+
+
 impl<'a, T:?Sized> RefBox<'a,T>{
     pub unsafe fn new(t:&'a mut T)->Self{
         Self{
-            ptr:t,
+            ptr:t.into(),
             _ph:PhantomData
         }
     }
 
     pub fn leak(self)->&'a mut T{
         let ans = unsafe{
-            &mut* self.ptr
+            &mut* self.ptr.as_ptr()
         };
         core::mem::forget(self);
         ans
@@ -95,17 +101,17 @@ impl<'a, T:?Sized> RefBox<'a,T>{
 impl<T:?Sized> Drop for RefBox<'_, T>{
 
 fn drop(&mut self) { unsafe{
-    core::ptr::drop_in_place(self.ptr)
+    core::ptr::drop_in_place(self.ptr.as_ptr())
 } }
 }
 
 impl<T:?Sized> Deref for RefBox<'_,T>{
 type Target = T;
-fn deref(&self) -> &T { unsafe{&*self.ptr}}
+fn deref(&self) -> &T { unsafe{&*self.ptr.as_ptr()}}
 
 }
 impl<T:?Sized> DerefMut for RefBox<'_,T>{
-fn deref_mut(&mut self) -> &mut T { unsafe{&mut *self.ptr} }
+fn deref_mut(&mut self) -> &mut T { unsafe{&mut *self.ptr.as_ptr()} }
 }
 
 // ───────────── STACK ALLOC (untyped, bytes) ────────────────────────────
@@ -125,26 +131,15 @@ impl<'lex> StackAlloc<'lex> {
         let curr_len = self.0.len();
         let curr_ptr = unsafe { self.0.get_base().add(curr_len) };
 
-        /* built-in helper: bytes to add so `curr_ptr` satisfies `align_of::<T>()` */
         let pad = curr_ptr.align_offset(align_of::<T>());
-        debug_assert!(pad != usize::MAX, "impossible alignment failure");
 
-        let total = pad + size_of::<T>(); // pad + payload
+        let total = pad + size_of::<T>();
         unsafe {
-            self.0.alloc(total)?; // bump StackVec ↑
+            self.0.alloc(total)?;
             let slot = curr_ptr.add(pad) as *mut MaybeUninit<T>;
             Some(&mut *slot)
         }
     }
-
-
-
-    // #[inline]
-    // pub fn save_slice<T:Clone>(&mut self,t:&[T])->Option<&'lex mut [T]> {
-    //     let layout =  Layout::array::<T>(t.len());
-        
-    //     self.alloc().map(|x| x.write(t))
-    // }
 
     #[inline]
     pub fn save<T>(&mut self,t:T)->Option<RefBox<'lex,T>> {
@@ -160,13 +155,11 @@ impl<'lex> StackAlloc<'lex> {
         let curr_len = self.0.len();
         let curr_ptr = unsafe { self.0.get_base().add(curr_len) };
 
-        /* built-in helper: bytes to add so `curr_ptr` satisfies `align_of::<T>()` */
         let pad = curr_ptr.align_offset(align_of::<T>());
-        debug_assert!(pad != usize::MAX, "impossible alignment failure");
 
-        let total = pad + core::mem::size_of_val(t); // pad + payload
+        let total = pad + core::mem::size_of_val(t);
         unsafe {
-            self.0.alloc(total)?; // bump StackVec ↑
+            self.0.alloc(total)?;
             let slot = curr_ptr.add(pad) as *mut MaybeUninit<T>;
             Some(RefBox::new((&mut *slot).write(t.clone())))
         }
@@ -177,13 +170,11 @@ impl<'lex> StackAlloc<'lex> {
         let curr_len = self.0.len();
         let curr_ptr = unsafe { self.0.get_base().add(curr_len) };
 
-        /* built-in helper: bytes to add so `curr_ptr` satisfies `align_of::<T>()` */
         let pad = curr_ptr.align_offset(align_of::<T>());
-        debug_assert!(pad != usize::MAX, "impossible alignment failure");
 
-        let total = pad + core::mem::size_of_val(t); // pad + payload
+        let total = pad + core::mem::size_of_val(t);
         unsafe {
-            self.0.alloc(total)?; // bump StackVec ↑
+            self.0.alloc(total)?;
             let slot = curr_ptr.add(pad) as *mut MaybeUninit<T>;
             let slot: &mut [MaybeUninit<T>] = core::slice::from_raw_parts_mut(slot,t.len());
             for (s,x) in slot.into_iter().zip(t.iter()){
@@ -254,10 +245,6 @@ impl<'me, 'lex> StackWriter<'me, 'lex> {
     pub fn discard(self) {
         unsafe { self.alloc.goto_checkpoint(StackAllocCheckPoint(self.start)) }
     }
-
-    // pub fn read_from<R:Read>(&mut self,reader:&mut R){
-
-    // }
 }
 
 // ───────────── STACK ALLOC (typed) ─────────────────────────────────────
