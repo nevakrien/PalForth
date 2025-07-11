@@ -37,7 +37,7 @@ impl<'me, 'lex> CompContext<'me, 'lex> {
     #[inline]
     pub fn finalize_code(&self) -> Result<&'lex [Code], ()> {
         if self.stack.verify_end() {
-            Ok(self.lex.code_mem.index_checkpoint(self.start))
+            unsafe {Ok(self.lex.code_mem.index_checkpoint(self.start))}
         } else {
             Err(())
         }

@@ -277,19 +277,21 @@ impl<'a, T> StackAllocator<'a, T> {
         self.0.len()
     }
 
+    ///# Safety the original save must not exist
     #[inline]
-    pub fn get(&self, cp: usize) -> Option<&'a [T]> {
+    pub unsafe fn get(&self, cp: usize) -> Option<&'a [T]> {
         let live = self.0.len() - cp;
         let addr = self.0.peek_many(live)?.as_ptr().addr();
         let p = self.0.peek_raw()?.with_addr(addr);
         unsafe { Some(slice::from_raw_parts(p, live)) }
     }
 
+    ///# Safety the original save must not exist
     #[inline]
-    pub fn index_checkpoint(&self, cp: usize) -> &'a [T] {
+    pub unsafe fn index_checkpoint(&self, cp: usize) -> &'a [T] { unsafe {
         self.get(cp)
             .expect("checkpoint math is wrong")
-    }
+    }}
 
     /// # Safety
     /// No live references into the abandoned tail may survive.
@@ -322,19 +324,6 @@ impl<'a, T> StackAllocator<'a, T> {
     }
 }
 
-impl<T> Index<usize> for StackAllocator<'_, T> {
-    type Output = T;
-    #[inline]
-    fn index(&self, i: usize) -> &T {
-        &self.0[i]
-    }
-}
-impl<T> IndexMut<usize> for StackAllocator<'_, T> {
-    #[inline]
-    fn index_mut(&mut self, i: usize) -> &mut T {
-        &mut self.0[i]
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -107,7 +107,7 @@ pub fn add_buildin<'lex>(
     let start = lex.code_mem.check_point();
     lex.code_mem.save(Code::basic(primitive, 0)).expect("code arena full");
     lex.code_mem.save(Code::basic(crate::buildins::ret, 0)).expect("code arena full");
-    lex.code_mem.index_checkpoint(start)
+    unsafe {lex.code_mem.index_checkpoint(start)}
 }
 
 pub fn add_buildin_2<'lex>(
@@ -119,7 +119,7 @@ pub fn add_buildin_2<'lex>(
     let start = lex.code_mem.check_point();
     lex.code_mem.save(Code::basic(primitive, param)).expect("code arena full");
     lex.code_mem.save(Code::basic(crate::buildins::ret, param)).expect("code arena full");
-    lex.code_mem.index_checkpoint(start)
+    unsafe{lex.code_mem.index_checkpoint(start)}
 }
 
 
