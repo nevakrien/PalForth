@@ -279,7 +279,7 @@ impl<'a, T> StackAllocator<'a, T> {
 
     ///# Safety the original save must not exist
     #[inline]
-    pub unsafe fn get(&self, cp: usize) -> Option<&'a [T]> {
+    pub unsafe fn try_index_checkpoint(&self, cp: usize) -> Option<&'a [T]> {
         let live = self.0.len() - cp;
         let addr = self.0.peek_many(live)?.as_ptr().addr();
         let p = self.0.peek_raw()?.with_addr(addr);
@@ -289,7 +289,7 @@ impl<'a, T> StackAllocator<'a, T> {
     ///# Safety the original save must not exist
     #[inline]
     pub unsafe fn index_checkpoint(&self, cp: usize) -> &'a [T] { unsafe {
-        self.get(cp)
+        self.try_index_checkpoint(cp)
             .expect("checkpoint math is wrong")
     }}
 
